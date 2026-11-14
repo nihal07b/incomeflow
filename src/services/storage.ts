@@ -5,6 +5,8 @@ import type {
   LocalDate,
   MoneyPaise,
   TimeSlot,
+  DayStatus,
+  DayLog,
 } from '../types'
 
 /**
@@ -15,6 +17,7 @@ export const STORAGE_KEYS = {
   SHIFTS: 'incomeflow:v1:shifts',
   EXPENSES: 'incomeflow:v1:expenses',
   TRANSACTIONS: 'incomeflow:v1:transactions',
+  DAY_LOGS: 'incomeflow:v1:daylogs',
 } as const
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS]
@@ -376,6 +379,36 @@ export function validateTransaction(transaction: unknown): TransactionRecord {
   return result
 }
 
+export const VALID_DAY_STATUSES: DayStatus[] = ['complete', 'no_work', 'incomplete']
+
+export function validateDayLog(dayLog: unknown): DayLog {
+  if (typeof dayLog !== 'object' || dayLog === null) {
+    throw new StorageValidationError('DayLog must be an object')
+  }
+  const d = dayLog as Record<string, unknown>
+
+  if (typeof d.date !== 'string' || !isValidLocalDate(d.date)) {
+    throw new StorageValidationError(
+      'DayLog date must be a valid calendar date in YYYY-MM-DD format',
+      'date'
+    )
+  }
+  if (
+    typeof d.status !== 'string' ||
+    !VALID_DAY_STATUSES.includes(d.status as DayStatus)
+  ) {
+    throw new StorageValidationError(
+      'DayLog status must be "complete", "no_work", or "incomplete"',
+      'status'
+    )
+  }
+
+  return {
+    date: d.date,
+    status: d.status as DayStatus,
+  }
+}
+
 /**
  * Storage Service Contract
  * Designed so a future Supabase implementation can implement this exact interface.
@@ -405,6 +438,12 @@ export interface StorageService {
   addTransaction(transaction: TransactionRecord): Promise<TransactionRecord>
   updateTransaction(id: string, updates: Partial<Omit<TransactionRecord, 'id'>>): Promise<TransactionRecord>
   deleteTransaction(id: string): Promise<boolean>
+
+  // Day Logs
+  getDayLogs(): Promise<DayLog[]>
+  saveDayLogs(dayLogs: DayLog[]): Promise<DayLog[]>
+  upsertDayLog(dayLog: DayLog): Promise<DayLog>
+  deleteDayLog(date: LocalDate): Promise<boolean>
 
   // Reset / Clear
   clearAll(): Promise<void>
@@ -826,6 +865,95 @@ export class LocalStorageService implements StorageService {
     return true
   }
 
+  // --- Day Log Operations ---
+
+  async getDayLogs(): Promise<DayLog[]> {
+    const raw = this.readRaw(STORAGE_KEYS.DAY_LOGS)
+    if (raw === null || raw.trim() === '') {
+      return []
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new StorageCorruptionError(STORAGE_KEYS.DAY_LOGS, raw, 'Invalid JSON syntax')
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new StorageValidationError(`Stored day logs must be an array, received ${typeof parsed}`)
+    }
+
+    const seenDates = new Set<string>()
+    const validatedList: DayLog[] = []
+
+    for (const item of parsed) {
+      const validated = validateDayLog(item)
+      if (seenDates.has(validated.date)) {
+        throw new StorageValidationError(`Duplicate DayLog date detected: "${validated.date}"`)
+      }
+      seenDates.add(validated.date)
+      validatedList.push(validated)
+    }
+
+    return validatedList.sort((a, b) => b.date.localeCompare(a.date))
+  }
+
+  async saveDayLogs(dayLogs: DayLog[]): Promise<DayLog[]> {
+    if (!Array.isArray(dayLogs)) {
+      throw new StorageValidationError('dayLogs must be an array')
+    }
+
+    const seenDates = new Set<string>()
+    const validatedList: DayLog[] = []
+
+    for (const item of dayLogs) {
+      const validated = validateDayLog(item)
+      if (seenDates.has(validated.date)) {
+        throw new StorageValidationError(`Duplicate DayLog date detected: "${validated.date}"`)
+      }
+      seenDates.add(validated.date)
+      validatedList.push(validated)
+    }
+
+    const sorted = validatedList.sort((a, b) => b.date.localeCompare(a.date))
+    const json = JSON.stringify(sorted)
+    this.writeRaw(STORAGE_KEYS.DAY_LOGS, json)
+    return sorted
+  }
+
+  async upsertDayLog(dayLog: DayLog): Promise<DayLog> {
+    const validated = validateDayLog(dayLog)
+    const existing = await this.getDayLogs()
+    const index = existing.findIndex((d) => d.date === validated.date)
+
+    let updated: DayLog[]
+    if (index >= 0) {
+      updated = [...existing]
+      updated[index] = validated
+    } else {
+      updated = [validated, ...existing]
+    }
+
+    await this.saveDayLogs(updated)
+    return validated
+  }
+
+  async deleteDayLog(date: LocalDate): Promise<boolean> {
+    if (typeof date !== 'string' || !isValidLocalDate(date)) {
+      throw new StorageValidationError('Valid calendar date is required for deletion')
+    }
+
+    const existing = await this.getDayLogs()
+    const filtered = existing.filter((d) => d.date !== date)
+    if (filtered.length === existing.length) {
+      return false
+    }
+
+    await this.saveDayLogs(filtered)
+    return true
+  }
+
   // --- Reset / Clear ---
 
   async clearAll(): Promise<void> {
@@ -833,6 +961,7 @@ export class LocalStorageService implements StorageService {
     this.removeRaw(STORAGE_KEYS.SHIFTS)
     this.removeRaw(STORAGE_KEYS.EXPENSES)
     this.removeRaw(STORAGE_KEYS.TRANSACTIONS)
+    this.removeRaw(STORAGE_KEYS.DAY_LOGS)
   }
 }
 
@@ -867,6 +996,10 @@ export const storageService = {
   addTransaction: (t: TransactionRecord) => activeService.addTransaction(t),
   updateTransaction: (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u),
   deleteTransaction: (id: string) => activeService.deleteTransaction(id),
+  getDayLogs: () => activeService.getDayLogs(),
+  saveDayLogs: (d: DayLog[]) => activeService.saveDayLogs(d),
+  upsertDayLog: (d: DayLog) => activeService.upsertDayLog(d),
+  deleteDayLog: (date: LocalDate) => activeService.deleteDayLog(date),
   clearAll: () => activeService.clearAll(),
 }
 
@@ -887,4 +1020,8 @@ export const saveTransactions = (t: TransactionRecord[]) => activeService.saveTr
 export const addTransaction = (t: TransactionRecord) => activeService.addTransaction(t)
 export const updateTransaction = (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u)
 export const deleteTransaction = (id: string) => activeService.deleteTransaction(id)
+export const getDayLogs = () => activeService.getDayLogs()
+export const saveDayLogs = (d: DayLog[]) => activeService.saveDayLogs(d)
+export const upsertDayLog = (d: DayLog) => activeService.upsertDayLog(d)
+export const deleteDayLog = (date: LocalDate) => activeService.deleteDayLog(date)
 export const clearAllData = () => activeService.clearAll()

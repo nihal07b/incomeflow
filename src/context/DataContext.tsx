@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { dataStore as defaultStore, DataStore, type DataStoreState } from '../services/dataStore'
-import type { Profile, ShiftLog } from '../types'
+import type { Profile, ShiftLog, DayLog, LocalDate } from '../types'
 import type { TransactionRecord } from '../services/storage'
 import { StoreContext } from './StoreContext'
 
@@ -15,6 +15,8 @@ export interface DataContextValue extends DataStoreState {
     updates: Partial<Omit<TransactionRecord, 'id'>>
   ) => Promise<TransactionRecord>
   deleteTransaction: (id: string) => Promise<boolean>
+  upsertDayLog: (dayLog: DayLog) => Promise<DayLog>
+  deleteDayLog: (date: LocalDate) => Promise<boolean>
   refreshData: () => Promise<void>
 }
 

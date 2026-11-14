@@ -1,3 +1,4 @@
+import { DayStatusLogger } from '../components/DayStatusLogger'
 import { useState, useEffect, useId } from 'react'
 import type { ShiftLog, TimeSlot, LocalDate } from '../types'
 import { getTodayLocalDate } from '../services/storage'
@@ -183,6 +184,7 @@ export function ShiftsPage() {
 
   return (
     <div className="space-y-8">
+      <DayStatusLogger />
       {/* Page Header */}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>

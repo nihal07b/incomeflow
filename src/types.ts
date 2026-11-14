@@ -18,3 +18,11 @@ export interface PlanResult {
   assumptions: string[]
   explanation: string
 }
+
+export type DayStatus = 'complete' | 'no_work' | 'incomplete'
+
+export interface DayLog {
+  date: LocalDate
+  status: DayStatus
+}
+
