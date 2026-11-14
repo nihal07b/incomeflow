@@ -66,3 +66,11 @@ export interface FinancialSummaryInput {
   transactions?: Transaction[]
 }
 
+export type DayStatus = 'complete' | 'no_work' | 'incomplete'
+
+export interface DayLog {
+  date: LocalDate
+  status: DayStatus
+}
+
+
