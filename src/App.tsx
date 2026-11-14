@@ -1,10 +1,22 @@
 import { useState } from 'react'
 import { calculateBillGap } from './engine/cashflow'
+import BillsAndGoals from './components/BillsAndGoals'
 import { demoProjection } from './demo/scenario'
 
 const rupees = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100)
 
 export default function App() {
+  // Mock profile – in real app this would come from auth service
+  const mockProfile = {
+    id: 'profile-1',
+    displayName: 'Demo User',
+    language: 'en' as const,
+    currentCashPaise: 150000,
+    cashAsOfDate: '2026-11-14',
+    essentialDailySpendPaise: 1400,
+    minimumCushionPaise: 5000,
+  };
+
   const [repair, setRepair] = useState(false)
   const [extraShift, setExtraShift] = useState(false)
   const result = calculateBillGap({ ...demoProjection, otherExpensesPaise: repair ? 70000 : 0, expectedNetEarningsPaise: demoProjection.expectedNetEarningsPaise + (extraShift ? 65000 : 0) })
@@ -27,6 +39,11 @@ export default function App() {
         <p className="rounded-xl bg-teal-50 p-4 text-teal-950" aria-live="polite">{result.billGapPaise > 0 ? `This scenario still leaves an estimated ${rupees(result.billGapPaise)} gap after retaining your cash cushion.` : 'This scenario appears sufficient for the bill while retaining your cash cushion.'}</p>
         <button type="button" className="mt-5 rounded-lg border border-slate-300 px-4 py-2 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-teal-700" onClick={() => { setRepair(false); setExtraShift(false) }}>Reset scenario</button>
       </section>
+
+      <section className="my-12">
+        <BillsAndGoals profile={mockProfile} />
+      </section>
+
       <footer className="mt-8 text-sm leading-6 text-slate-500">Starter only: onboarding, shift history, daily cash-flow forecasting, persistence, authentication and Hindi translation are team tasks. No account connection or bank transfer is performed.</footer>
     </main>
   )

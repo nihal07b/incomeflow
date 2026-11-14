@@ -18,3 +18,118 @@ export interface PlanResult {
   assumptions: string[]
   explanation: string
 }
+
+/** Bill or EMI goal */
+export interface BillGoal {
+  id: string
+  profileId: string
+  name: string
+  targetPaise: MoneyPaise
+  dueDate: LocalDate
+  isPaid: boolean
+  createdAt: LocalDate
+}
+
+/** Single allocation record towards a goal (e.g. opening, manual, peak-day, withdrawal) */
+export interface GoalAllocation {
+  id: string
+  goalId: string
+  profileId: string
+  amountPaise: MoneyPaise
+  date: LocalDate
+  type: 'opening' | 'manual' | 'peak_day' | 'withdrawal'
+  note?: string
+  idempotencyKey?: string
+}
+
+export interface AddContributionInput {
+  targetId: string
+  targetType: 'bill' | 'vault'
+  amountPaise: MoneyPaise
+  note?: string
+  idempotencyKey?: string
+  type?: 'manual' | 'peak_day'
+}
+
+/** Baseline output contract from Member 4 / analytics engine */
+export interface BaselineOutput {
+  available: boolean
+  baselineDailyIncomePaise?: MoneyPaise
+  reason?: string
+  shiftsAnalyzed?: number
+}
+
+/** Calculated peak-day surplus savings suggestion */
+export interface PeakDaySuggestion {
+  id: string
+  date: LocalDate
+  hasBaseline: boolean
+  todayIncomePaise: MoneyPaise
+  baselineDailyIncomePaise?: MoneyPaise
+  extraIncomePaise: MoneyPaise
+  percentage: number
+  suggestedPaise: MoneyPaise
+  isEligible: boolean
+  explanation: string
+  suggestionRef: string
+}
+
+export interface WithdrawalInput {
+  targetId: string
+  targetType: 'bill' | 'vault'
+  amountPaise: MoneyPaise
+  note?: string
+  idempotencyKey?: string
+}
+
+/** Calculated display state of a BillGoal */
+export type BillStatus = 'active' | 'due-today' | 'overdue' | 'fully-funded'
+
+export interface BillGoalProgress {
+  goal: BillGoal
+  allocatedPaise: MoneyPaise
+  remainingPaise: MoneyPaise
+  status: BillStatus
+  contributionDays: number
+  requiredDailyPaise: MoneyPaise
+  progressPercent: number
+  isFullyFunded: boolean
+  isOverdue: boolean
+  isDueToday: boolean
+}
+
+/** Supported Vault categories */
+export type VaultCategory =
+  | 'emergency'
+  | 'festival'
+  | 'vehicle_maintenance'
+  | 'future_investment'
+  | 'custom'
+
+/** Savings vault that a user can allocate money to */
+export interface SavingsVault {
+  id: string
+  profileId: string
+  label: string
+  category: VaultCategory
+  targetPaise: MoneyPaise
+  currentPaise: MoneyPaise
+  createdAt?: LocalDate
+}
+
+export interface VaultProgress {
+  vault: SavingsVault
+  allocatedPaise: MoneyPaise
+  remainingPaise: MoneyPaise
+  progressPercent: number
+  isFullyFunded: boolean
+  totalContributionsPaise: MoneyPaise
+  totalWithdrawalsPaise: MoneyPaise
+}
+
+export interface CreateVaultInput {
+  label: string
+  category: VaultCategory
+  targetPaise: MoneyPaise
+  openingContributionPaise?: MoneyPaise
+}
