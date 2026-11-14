@@ -18,3 +18,59 @@ export interface PlanResult {
   assumptions: string[]
   explanation: string
 }
+
+export type TransactionType = 'income' | 'expense'
+
+export interface Transaction {
+  id: string
+  profileId?: string
+  date: LocalDate
+  amountPaise: MoneyPaise
+  type: TransactionType
+  category: string
+  description?: string
+  shiftId?: string | null
+  workSessionId?: string | null
+  repaymentId?: string | null
+}
+
+export interface Repayment {
+  id: string
+  profileId?: string
+  date: LocalDate
+  amountPaise: MoneyPaise
+  type: 'received' | 'paid'
+  category?: string
+  description?: string
+  transactionId?: string | null
+}
+
+export interface DailySeriesItem {
+  date: LocalDate
+  incomePaise: MoneyPaise
+  expensesPaise: MoneyPaise
+  netPaise: MoneyPaise
+}
+
+export interface FinancialSummary {
+  periodIncomePaise: MoneyPaise
+  periodExpensesPaise: MoneyPaise
+  netRecordedCashFlowPaise: MoneyPaise
+  dailySeries: DailySeriesItem[]
+  expenseCategoryTotals: Record<string, MoneyPaise>
+}
+
+export interface FinancialSummaryInput {
+  startDate?: LocalDate
+  endDate?: LocalDate
+  transactions?: Transaction[]
+}
+
+export type DayStatus = 'complete' | 'no_work' | 'incomplete'
+
+export interface DayLog {
+  date: LocalDate
+  status: DayStatus
+}
+
+
