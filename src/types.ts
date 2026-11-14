@@ -139,3 +139,9 @@ export interface InAppReminder {
   dismissed?: boolean
   createdAt: string
 }
+export type DayStatus = 'complete' | 'no_work' | 'incomplete'
+
+export interface DayLog {
+  date: LocalDate
+  status: DayStatus
+}
