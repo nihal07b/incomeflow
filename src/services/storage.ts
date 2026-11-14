@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   PROFILE: 'incomeflow:v1:profile',
   SHIFTS: 'incomeflow:v1:shifts',
   EXPENSES: 'incomeflow:v1:expenses',
+  TRANSACTIONS: 'incomeflow:v1:transactions',
 } as const
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS]
@@ -286,6 +287,95 @@ export function validatePlannedExpense(expense: unknown): ExpenseRecord {
   return result
 }
 
+export const TRANSACTION_INCOME_CATEGORIES = [
+  'delivery earnings',
+  'other income',
+] as const
+export type TransactionIncomeCategory = typeof TRANSACTION_INCOME_CATEGORIES[number]
+
+export const TRANSACTION_EXPENSE_CATEGORIES = [
+  'fuel',
+  'food',
+  'maintenance',
+  'household',
+  'other',
+] as const
+export type TransactionExpenseCategory = typeof TRANSACTION_EXPENSE_CATEGORIES[number]
+
+export type TransactionCategory = TransactionIncomeCategory | TransactionExpenseCategory
+export type TransactionType = 'income' | 'expense'
+export type PaymentMode = 'cash' | 'digital'
+
+export interface TransactionRecord {
+  id: string
+  profileId: string
+  type: TransactionType
+  amountPaise: MoneyPaise
+  date: LocalDate
+  category: TransactionCategory
+  paymentMode: PaymentMode
+  description?: string
+}
+
+export function validateTransaction(transaction: unknown): TransactionRecord {
+  if (typeof transaction !== 'object' || transaction === null) {
+    throw new StorageValidationError('Transaction must be an object')
+  }
+  const t = transaction as Record<string, unknown>
+
+  if (typeof t.id !== 'string' || t.id.trim() === '') {
+    throw new StorageValidationError('Transaction id must be a non-empty string', 'id')
+  }
+  if (typeof t.profileId !== 'string' || t.profileId.trim() === '') {
+    throw new StorageValidationError('Transaction profileId must be a non-empty string', 'profileId')
+  }
+  if (t.type !== 'income' && t.type !== 'expense') {
+    throw new StorageValidationError('Transaction type must be "income" or "expense"', 'type')
+  }
+  if (!isSafePaise(t.amountPaise, false) || t.amountPaise <= 0) {
+    throw new StorageValidationError('Transaction amountPaise must be a positive safe integer in paise', 'amountPaise')
+  }
+  if (typeof t.date !== 'string' || !isValidLocalDate(t.date)) {
+    throw new StorageValidationError('Transaction date must be a valid calendar date in YYYY-MM-DD format', 'date')
+  }
+  if (t.paymentMode !== 'cash' && t.paymentMode !== 'digital') {
+    throw new StorageValidationError('Transaction paymentMode must be "cash" or "digital"', 'paymentMode')
+  }
+
+  const category = t.category as string
+  if (t.type === 'income') {
+    if (!TRANSACTION_INCOME_CATEGORIES.includes(category as TransactionIncomeCategory)) {
+      throw new StorageValidationError(
+        `Income category must be one of: ${TRANSACTION_INCOME_CATEGORIES.join(', ')}`,
+        'category'
+      )
+    }
+  } else {
+    if (!TRANSACTION_EXPENSE_CATEGORIES.includes(category as TransactionExpenseCategory)) {
+      throw new StorageValidationError(
+        `Expense category must be one of: ${TRANSACTION_EXPENSE_CATEGORIES.join(', ')}`,
+        'category'
+      )
+    }
+  }
+
+  const result: TransactionRecord = {
+    id: t.id,
+    profileId: t.profileId,
+    type: t.type,
+    amountPaise: t.amountPaise,
+    date: t.date,
+    category: t.category as TransactionCategory,
+    paymentMode: t.paymentMode,
+  }
+
+  if (typeof t.description === 'string' && t.description.trim() !== '') {
+    result.description = t.description.trim()
+  }
+
+  return result
+}
+
 /**
  * Storage Service Contract
  * Designed so a future Supabase implementation can implement this exact interface.
@@ -308,6 +398,13 @@ export interface StorageService {
   addExpense(expense: PlannedExpense): Promise<ExpenseRecord>
   updateExpense(id: string, updates: Partial<Omit<PlannedExpense, 'id'>>): Promise<ExpenseRecord>
   deleteExpense(id: string): Promise<boolean>
+
+  // Transactions
+  getTransactions(): Promise<TransactionRecord[]>
+  saveTransactions(transactions: TransactionRecord[]): Promise<TransactionRecord[]>
+  addTransaction(transaction: TransactionRecord): Promise<TransactionRecord>
+  updateTransaction(id: string, updates: Partial<Omit<TransactionRecord, 'id'>>): Promise<TransactionRecord>
+  deleteTransaction(id: string): Promise<boolean>
 
   // Reset / Clear
   clearAll(): Promise<void>
@@ -621,12 +718,121 @@ export class LocalStorageService implements StorageService {
     return true
   }
 
+  // --- Transaction Operations ---
+
+  async getTransactions(): Promise<TransactionRecord[]> {
+    const raw = this.readRaw(STORAGE_KEYS.TRANSACTIONS)
+    if (raw === null || raw.trim() === '') {
+      return []
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new StorageCorruptionError(STORAGE_KEYS.TRANSACTIONS, raw, 'Invalid JSON syntax')
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new StorageValidationError(`Stored transactions must be an array, received ${typeof parsed}`)
+    }
+
+    const seenIds = new Set<string>()
+    const validatedList: TransactionRecord[] = []
+
+    for (const item of parsed) {
+      const validated = validateTransaction(item)
+      if (seenIds.has(validated.id)) {
+        throw new StorageValidationError(`Duplicate transaction record ID detected: "${validated.id}"`)
+      }
+      seenIds.add(validated.id)
+      validatedList.push(validated)
+    }
+
+    return validatedList
+  }
+
+  async saveTransactions(transactions: TransactionRecord[]): Promise<TransactionRecord[]> {
+    if (!Array.isArray(transactions)) {
+      throw new StorageValidationError('transactions must be an array')
+    }
+
+    const seenIds = new Set<string>()
+    const validatedList: TransactionRecord[] = []
+
+    for (const item of transactions) {
+      const validated = validateTransaction(item)
+      if (seenIds.has(validated.id)) {
+        throw new StorageValidationError(`Duplicate transaction record ID detected: "${validated.id}"`)
+      }
+      seenIds.add(validated.id)
+      validatedList.push(validated)
+    }
+
+    const json = JSON.stringify(validatedList)
+    this.writeRaw(STORAGE_KEYS.TRANSACTIONS, json)
+    return validatedList
+  }
+
+  async addTransaction(transaction: TransactionRecord): Promise<TransactionRecord> {
+    const validated = validateTransaction(transaction)
+    const existing = await this.getTransactions()
+
+    if (existing.some((t) => t.id === validated.id)) {
+      throw new StorageValidationError(`Transaction with ID "${validated.id}" already exists`)
+    }
+
+    const updated = [...existing, validated]
+    await this.saveTransactions(updated)
+    return validated
+  }
+
+  async updateTransaction(id: string, updates: Partial<Omit<TransactionRecord, 'id'>>): Promise<TransactionRecord> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid transaction ID is required for update')
+    }
+
+    const existing = await this.getTransactions()
+    const index = existing.findIndex((t) => t.id === id)
+    if (index === -1) {
+      throw new StorageNotFoundError('TransactionRecord', id)
+    }
+
+    const target = existing[index]
+    const merged = {
+      ...target,
+      ...updates,
+      id,
+    }
+
+    const validated = validateTransaction(merged)
+    existing[index] = validated
+    await this.saveTransactions(existing)
+    return validated
+  }
+
+  async deleteTransaction(id: string): Promise<boolean> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid transaction ID is required for deletion')
+    }
+
+    const existing = await this.getTransactions()
+    const filtered = existing.filter((t) => t.id !== id)
+    if (filtered.length === existing.length) {
+      return false
+    }
+
+    await this.saveTransactions(filtered)
+    return true
+  }
+
   // --- Reset / Clear ---
 
   async clearAll(): Promise<void> {
     this.removeRaw(STORAGE_KEYS.PROFILE)
     this.removeRaw(STORAGE_KEYS.SHIFTS)
     this.removeRaw(STORAGE_KEYS.EXPENSES)
+    this.removeRaw(STORAGE_KEYS.TRANSACTIONS)
   }
 }
 
@@ -656,6 +862,11 @@ export const storageService = {
   addExpense: (e: PlannedExpense) => activeService.addExpense(e),
   updateExpense: (id: string, u: Partial<Omit<PlannedExpense, 'id'>>) => activeService.updateExpense(id, u),
   deleteExpense: (id: string) => activeService.deleteExpense(id),
+  getTransactions: () => activeService.getTransactions(),
+  saveTransactions: (t: TransactionRecord[]) => activeService.saveTransactions(t),
+  addTransaction: (t: TransactionRecord) => activeService.addTransaction(t),
+  updateTransaction: (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u),
+  deleteTransaction: (id: string) => activeService.deleteTransaction(id),
   clearAll: () => activeService.clearAll(),
 }
 
@@ -671,4 +882,9 @@ export const saveExpenses = (e: PlannedExpense[]) => activeService.saveExpenses(
 export const addExpense = (e: PlannedExpense) => activeService.addExpense(e)
 export const updateExpense = (id: string, u: Partial<Omit<PlannedExpense, 'id'>>) => activeService.updateExpense(id, u)
 export const deleteExpense = (id: string) => activeService.deleteExpense(id)
+export const getTransactions = () => activeService.getTransactions()
+export const saveTransactions = (t: TransactionRecord[]) => activeService.saveTransactions(t)
+export const addTransaction = (t: TransactionRecord) => activeService.addTransaction(t)
+export const updateTransaction = (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u)
+export const deleteTransaction = (id: string) => activeService.deleteTransaction(id)
 export const clearAllData = () => activeService.clearAll()
