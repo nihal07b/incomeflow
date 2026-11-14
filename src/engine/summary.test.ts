@@ -52,13 +52,29 @@ describe('pure financial-summary calculations', () => {
     ])
   })
 
-  it('rejects negative amountPaise for transactions with an explicit error', () => {
-    const transactions: Transaction[] = [
-      { id: 'tx-neg', date: '2026-11-01', amountPaise: -5000, type: 'expense', category: 'fuel' },
+  it('rejects negative amountPaise on transactions with a clear error', () => {
+    const negativeExpense: Transaction[] = [
+      { id: 'tx-neg-exp', date: '2026-11-01', amountPaise: -5000, type: 'expense', category: 'fuel' },
+    ]
+    expect(() => calculateFinancialSummary(negativeExpense)).toThrow(
+      'Transaction tx-neg-exp amountPaise cannot be negative, received: -5000',
+    )
+
+    const negativeIncome: Transaction[] = [
+      { id: 'tx-neg-inc', date: '2026-11-01', amountPaise: -10000, type: 'income', category: 'shift' },
+    ]
+    expect(() => calculateFinancialSummary(negativeIncome)).toThrow(
+      'Transaction tx-neg-inc amountPaise cannot be negative, received: -10000',
+    )
+  })
+
+  it('rejects Infinity amountPaise on transactions with a clear error', () => {
+    const transactionsWithInfinity: Transaction[] = [
+      { id: 'tx-inf', date: '2026-11-01', amountPaise: Infinity, type: 'income', category: 'shift' },
     ]
 
-    expect(() => calculateFinancialSummary(transactions)).toThrow(
-      'Transaction tx-neg amountPaise cannot be negative, received: -5000',
+    expect(() => calculateFinancialSummary(transactionsWithInfinity)).toThrow(
+      'Transaction tx-inf amountPaise must be integer paise, received: Infinity',
     )
   })
 
@@ -227,6 +243,13 @@ describe('pure financial-summary calculations', () => {
     expect(() =>
       calculateFinancialSummary([
         { id: 'tx-bad-nan', date: '2026-11-01', amountPaise: NaN, type: 'income', category: 'test' },
+      ]),
+    ).toThrow('must be integer paise')
+
+    // Infinity amount
+    expect(() =>
+      calculateFinancialSummary([
+        { id: 'tx-bad-inf', date: '2026-11-01', amountPaise: Infinity, type: 'income', category: 'test' },
       ]),
     ).toThrow('must be integer paise')
 
