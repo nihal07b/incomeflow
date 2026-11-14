@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback, useId } from 'react'
+import { useState, useEffect, useId } from 'react'
 import type { ShiftLog, TimeSlot, LocalDate } from '../types'
-import {
-  storageService,
-  getTodayLocalDate,
-} from '../services/storage'
+import { getTodayLocalDate } from '../services/storage'
+import { useShifts } from '../hooks/useData'
 import {
   rupeesToPaise,
   paiseToRupees,
@@ -11,7 +9,6 @@ import {
   formatSlotLabel,
   calculateNetPaise,
   calculateNetHourlyPaise,
-  calculateShiftSummary,
   validateShiftInput,
   type ShiftFormErrors,
 } from '../utils/shifts'
@@ -24,9 +21,17 @@ function generateId(): string {
 }
 
 export function ShiftsPage() {
-  const [shifts, setShifts] = useState<ShiftLog[]>([])
-  const [loading, setLoading] = useState(true)
-  const [storageError, setStorageError] = useState<string | null>(null)
+  const {
+    shifts,
+    shiftSummary: summary,
+    loading,
+    error: storageError,
+    addShift,
+    updateShift,
+    deleteShift,
+    refreshShifts,
+  } = useShifts()
+
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Form State
@@ -49,50 +54,6 @@ export function ShiftsPage() {
   const hoursFieldId = useId()
   const grossFieldId = useId()
   const costsFieldId = useId()
-
-  // Load shifts from local storage
-  const loadShifts = useCallback(async () => {
-    try {
-      const data = await storageService.getShifts()
-      setStorageError(null)
-      // Sort newest first
-      const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date))
-      setShifts(sorted)
-    } catch (err) {
-      setStorageError(
-        err instanceof Error ? err.message : 'Failed to load shifts from storage'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const init = async () => {
-      try {
-        const data = await storageService.getShifts()
-        if (!cancelled) {
-          const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date))
-          setShifts(sorted)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setStorageError(
-            err instanceof Error ? err.message : 'Failed to load shifts from storage'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-    init()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Clear success notification after 4 seconds
   useEffect(() => {
@@ -155,7 +116,7 @@ export function ShiftsPage() {
       const numHours = Number(hours)
 
       if (editingShiftId) {
-        await storageService.updateShift(editingShiftId, {
+        await updateShift(editingShiftId, {
           date,
           slot,
           hours: numHours,
@@ -173,12 +134,11 @@ export function ShiftsPage() {
           grossEarningsPaise: grossPaise,
           workCostsPaise: costsPaise,
         }
-        await storageService.addShift(newShift)
+        await addShift(newShift)
         setSuccessMessage('Work session saved successfully!')
       }
 
       resetForm()
-      await loadShifts()
     } catch (err) {
       setFormErrors({
         general:
@@ -195,17 +155,16 @@ export function ShiftsPage() {
   const handleDeleteConfirm = async (id: string) => {
     setIsDeleting(true)
     try {
-      await storageService.deleteShift(id)
+      await deleteShift(id)
       setConfirmDeleteId(null)
       setSuccessMessage('Shift deleted successfully.')
       if (editingShiftId === id) {
         resetForm()
       }
-      await loadShifts()
     } catch (err) {
-      setStorageError(
-        err instanceof Error ? err.message : 'Failed to delete shift'
-      )
+      setFormErrors({
+        general: err instanceof Error ? err.message : 'Failed to delete shift',
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -221,9 +180,6 @@ export function ShiftsPage() {
   const previewNetPaise = calculateNetPaise(previewGrossPaise, previewCostsPaise)
   const previewHours = Number(hours) > 0 ? Number(hours) : 0
   const previewHourlyRate = calculateNetHourlyPaise(previewNetPaise, previewHours)
-
-  // Summary Metrics
-  const summary = calculateShiftSummary(shifts)
 
   return (
     <div className="space-y-8">
@@ -261,7 +217,7 @@ export function ShiftsPage() {
             </p>
             <button
               type="button"
-              onClick={loadShifts}
+              onClick={() => refreshShifts()}
               className="ml-3 rounded bg-rose-200 px-2 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-300"
             >
               Retry

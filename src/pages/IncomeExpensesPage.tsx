@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useId } from 'react'
+import { useState, useEffect, useId } from 'react'
 import {
-  storageService,
   getTodayLocalDate,
   TRANSACTION_INCOME_CATEGORIES,
   TRANSACTION_EXPENSE_CATEGORIES,
@@ -9,12 +8,12 @@ import {
   type TransactionCategory,
   type PaymentMode,
 } from '../services/storage'
+import { useTransactions } from '../hooks/useData'
 import {
   rupeesToPaise,
   paiseToRupees,
   formatRupees,
   getCategoryLabel,
-  calculateTransactionSummary,
   filterTransactions,
   validateTransactionInput,
   type TransactionFormErrors,
@@ -29,9 +28,17 @@ function generateId(): string {
 }
 
 export function IncomeExpensesPage() {
-  const [transactions, setTransactions] = useState<TransactionRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  const [storageError, setStorageError] = useState<string | null>(null)
+  const {
+    transactions,
+    transactionSummary: summary,
+    loading,
+    error: storageError,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    refreshTransactions,
+  } = useTransactions()
+
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Form State
@@ -64,50 +71,6 @@ export function IncomeExpensesPage() {
   const categoryFieldId = useId()
   const modeFieldId = useId()
   const descFieldId = useId()
-
-  // Load transactions from local storage
-  const loadTransactions = useCallback(async () => {
-    try {
-      const data = await storageService.getTransactions()
-      setStorageError(null)
-      // Sort newest date first
-      const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date))
-      setTransactions(sorted)
-    } catch (err) {
-      setStorageError(
-        err instanceof Error ? err.message : 'Failed to load transactions'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const init = async () => {
-      try {
-        const data = await storageService.getTransactions()
-        if (!cancelled) {
-          const sorted = [...data].sort((a, b) => b.date.localeCompare(a.date))
-          setTransactions(sorted)
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setStorageError(
-            err instanceof Error ? err.message : 'Failed to load transactions'
-          )
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
-    }
-    init()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Clear success notification after 4 seconds
   useEffect(() => {
@@ -182,7 +145,7 @@ export function IncomeExpensesPage() {
       const amountPaise = rupeesToPaise(Number(amountRupees))
 
       if (editingTxId) {
-        await storageService.updateTransaction(editingTxId, {
+        await updateTransaction(editingTxId, {
           type,
           amountPaise,
           date,
@@ -202,12 +165,11 @@ export function IncomeExpensesPage() {
           paymentMode,
           description: description.trim() || undefined,
         }
-        await storageService.addTransaction(newTx)
+        await addTransaction(newTx)
         setSuccessMessage(`${type === 'income' ? 'Income' : 'Expense'} recorded successfully!`)
       }
 
       resetForm()
-      await loadTransactions()
     } catch (err) {
       setFormErrors({
         general:
@@ -224,17 +186,16 @@ export function IncomeExpensesPage() {
   const handleDeleteConfirm = async (id: string) => {
     setIsDeleting(true)
     try {
-      await storageService.deleteTransaction(id)
+      await deleteTransaction(id)
       setConfirmDeleteId(null)
       setSuccessMessage('Transaction deleted successfully.')
       if (editingTxId === id) {
         resetForm()
       }
-      await loadTransactions()
     } catch (err) {
-      setStorageError(
-        err instanceof Error ? err.message : 'Failed to delete transaction'
-      )
+      setFormErrors({
+        general: err instanceof Error ? err.message : 'Failed to delete transaction',
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -258,8 +219,7 @@ export function IncomeExpensesPage() {
     })
   }
 
-  // Summaries & Filtered Data
-  const summary = calculateTransactionSummary(transactions)
+  // Filtered Data
   const filteredTransactions = filterTransactions(transactions, filters)
 
   // Live preview values
@@ -302,10 +262,7 @@ export function IncomeExpensesPage() {
             </p>
             <button
               type="button"
-              onClick={() => {
-                setLoading(true)
-                loadTransactions()
-              }}
+              onClick={() => refreshTransactions()}
               className="ml-3 rounded bg-rose-200 px-2 py-1 text-xs font-semibold text-rose-900 hover:bg-rose-300"
             >
               Retry
