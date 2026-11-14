@@ -1664,3 +1664,4 @@ export const getRepayments = (udhaarId?: string) => activeService.getRepayments(
 export const saveRepayments = (r: RepaymentRecord[]) => activeService.saveRepayments(r)
 export const recordRepayment = (p: RecordRepaymentParams) => activeService.recordRepayment(p)
 export const clearAllData = () => activeService.clearAll()
+export type { PaymentMode } from '../types'

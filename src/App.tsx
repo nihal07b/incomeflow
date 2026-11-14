@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { NavTabId } from './components/navigation'
 import { Layout } from './components/Layout'
 import { OverviewPage } from './pages/OverviewPage'
@@ -6,6 +6,7 @@ import { ShiftsPage } from './pages/ShiftsPage'
 import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
 import { BillsVaultsPage } from './pages/BillsVaultsPage'
 import { UdhaarPage } from './pages/UdhaarPage'
+import { DataProvider } from './context/DataContext'
 
 function getInitialTab(): NavTabId {
   const hash = window.location.hash.replace('#', '')
@@ -57,8 +58,10 @@ export default function App() {
   }
 
   return (
-    <Layout activeTab={activeTab} onSelectTab={handleSelectTab}>
-      {renderCurrentPage()}
-    </Layout>
+    <DataProvider>
+      <Layout activeTab={activeTab} onSelectTab={handleSelectTab}>
+        {renderCurrentPage()}
+      </Layout>
+    </DataProvider>
   )
 }
