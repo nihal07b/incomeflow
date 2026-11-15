@@ -1,7 +1,8 @@
+import { calculateDailyAverages, type DailyAveragesResult } from '../engine/dailyAverages'
 import { calculateFinancialSummary } from '../engine/summary'
 import { getStorageService } from './storage'
 import type { StorageService } from './storage'
-import type { FinancialSummary, LocalDate, Transaction } from '../types'
+import type { DayStatus, FinancialSummary, LocalDate, Transaction } from '../types'
 
 export type AnalysisPeriod = 'week' | 'month'
 export interface AnalysisView {
@@ -11,6 +12,8 @@ export interface AnalysisView {
   summary: FinancialSummary
   recordedDates: LocalDate[]
   hasRecords: boolean
+  dayStatuses: Record<LocalDate, DayStatus>
+  dayAnalysis: { status: 'ready'; result: DailyAveragesResult } | { status: 'error'; message: string }
 }
 
 /** Civil-date validation: Member 4's engine checks format, not calendar validity. */
@@ -47,9 +50,12 @@ export function getAnalysisRange(period: AnalysisPeriod, endDate: LocalDate) {
 export async function loadFinancialAnalysis(
   period: AnalysisPeriod,
   endDate: LocalDate,
-  service: Pick<StorageService, 'getProfile' | 'getTransactions'> = getStorageService(),
+  service: Pick<StorageService, 'getProfile' | 'getTransactions' | 'getDayLogs'> = getStorageService(),
+  today: LocalDate = getTodayIST(),
 ): Promise<AnalysisView> {
   const range = getAnalysisRange(period, endDate)
+  parseCalendarDate(today)
+  if (endDate > today) throw new Error('The selected period cannot end in the future.')
   const [profile, records] = await Promise.all([service.getProfile(), service.getTransactions()])
   // Existing UdhaarPage writes this local-demo profile ID. Never combine profiles.
   // This is a local selection convention, NOT authentication or backend access control.
@@ -68,5 +74,19 @@ export async function loadFinancialAnalysis(
   const recordedDates = [...new Set(transactions
     .filter(t => t.date >= range.startDate && t.date <= range.endDate)
     .map(t => t.date))]
-  return { ...range, profileId, summary, recordedDates, hasRecords: recordedDates.length > 0 }
+  let dayStatuses: Record<LocalDate, DayStatus> = {}
+  let dayAnalysis: AnalysisView['dayAnalysis']
+  try {
+    // DayLog currently belongs to this browser, not to an authenticated profile.
+    const logs = await service.getDayLogs()
+    for (const log of logs) parseCalendarDate(log.date)
+    const dayLogs = logs.filter(log => log.date >= range.startDate && log.date <= range.endDate)
+    const result = calculateDailyAverages({ ...range, transactions, dayLogs, today })
+    dayStatuses = Object.fromEntries(dayLogs.map(log => [log.date, log.status]))
+    dayAnalysis = { status: 'ready', result }
+  } catch (error: unknown) {
+    // A classification problem must not hide valid transaction totals.
+    dayAnalysis = { status: 'error', message: error instanceof Error ? error.message : 'Daily status analysis could not be loaded.' }
+  }
+  return { ...range, profileId, summary, recordedDates, hasRecords: recordedDates.length > 0, dayStatuses, dayAnalysis }
 }

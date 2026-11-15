@@ -15,7 +15,18 @@ type LoadState =
   | { key: string; status: 'error'; message: string }
 
 function AnalysisResults({ data }: { data: AnalysisView }) {
-  const { summary, recordedDates, hasRecords } = data
+  const { summary, recordedDates, hasRecords, dayStatuses, dayAnalysis } = data
+  const knownIncomeDate = (date: string) => recordedDates.includes(date) || dayStatuses[date] === 'complete' || dayStatuses[date] === 'no_work'
+  const hasDailyEvidence = hasRecords || Object.values(dayStatuses).some(status => status === 'complete' || status === 'no_work')
+  const statusLabel = (date: string) => {
+    if (dayAnalysis.status === 'error') return 'Daily status unavailable'
+    switch (dayStatuses[date]) {
+      case 'complete': return 'Complete — worked'
+      case 'no_work': return 'Explicitly no work'
+      case 'incomplete': return 'Incomplete logging'
+      default: return 'Unknown — no daily status'
+    }
+  }
   const recorded = new Set(recordedDates)
   const peak = Math.max(1, ...summary.dailySeries.map(day => day.incomePaise))
   const categories = Object.entries(summary.expenseCategoryTotals).sort((a, b) => b[1] - a[1])
@@ -29,7 +40,7 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
     <div className="space-y-6">
       <p className="text-sm text-slate-600">Loaded {data.startDate} to {data.endDate}, inclusive · IST calendar dates · Local profile: <span className="break-all font-medium">{data.profileId}</span></p>
       {!hasRecords && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-        No transaction entries in this period. The summary is unavailable; this is not confirmation of zero earnings. Select a period containing saved transactions, then refresh.
+        No transaction entries in this period. Saved daily statuses are shown below when available; unlogged days remain unknown.
       </div>}
       <section aria-label="Financial totals" className="grid gap-4 md:grid-cols-3">
         {cards.map(card => <article key={card.label} className={panel}>
@@ -41,18 +52,18 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
 
       <section className={panel} aria-labelledby="income-trend-heading">
         <h2 id="income-trend-heading" className="text-lg font-bold text-slate-900">Recorded income trend</h2>
-        <p className="mt-1 text-sm text-slate-600">Bars show saved income. A grey marker means no transactions were entered that day; it does not prove zero earnings. Having an entry also does not prove the day is fully logged.</p>
-        {hasRecords ? <>
+        <p className="mt-1 text-sm text-slate-600">Bars show recorded cash income, including repayments. A completed workday can have ₹0 income. No-work days are labelled separately. Grey markers are unknown or incomplete days without entries, not confirmed zero earnings.</p>
+        {hasDailyEvidence ? <>
           <div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable daily income chart">
             <div className="flex items-end gap-2 border-b border-slate-200 pb-2" style={{ minWidth: summary.dailySeries.length * 48 }}>
               {summary.dailySeries.map(day => <div key={day.date} className="min-w-10 flex-1 text-center">
                 <div className="flex h-36 items-end justify-center">
-                  {recorded.has(day.date) ? <div
+                  {knownIncomeDate(day.date) ? <div
                     className="w-6 rounded-t bg-teal-600"
                     style={{ height: day.incomePaise === 0 ? 2 : Math.max(3, day.incomePaise / peak * 140) }}
-                    role="img" aria-label={`${day.date}: ${money(day.incomePaise)} recorded income`}
-                    title={`${day.date}: ${money(day.incomePaise)} recorded income`}
-                  /> : <span role="img" aria-label={`${day.date}: no transaction entries`} title={`${day.date}: no transaction entries`} className="mb-1 h-1 w-5 rounded bg-slate-300" />}
+                    role="img" aria-label={`${day.date}: ${money(day.incomePaise)} recorded income; ${statusLabel(day.date)}`}
+                    title={`${day.date}: ${money(day.incomePaise)} recorded income; ${statusLabel(day.date)}`}
+                  /> : <span role="img" aria-label={`${day.date}: ${statusLabel(day.date)}; no transaction entries`} title={`${day.date}: ${statusLabel(day.date)}; no transaction entries`} className="mb-1 h-1 w-5 rounded bg-slate-300" />}
                 </div>
                 <span className="mt-2 block text-xs text-slate-600">{day.date.slice(8)}/{day.date.slice(5, 7)}</span>
               </div>)}
@@ -66,8 +77,8 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
                 <thead><tr className="border-b border-slate-200"><th scope="col" className="p-2">Date</th><th scope="col" className="p-2">Income</th><th scope="col" className="p-2">Expenses</th><th scope="col" className="p-2">Net</th><th scope="col" className="p-2">Records</th></tr></thead>
                 <tbody>{summary.dailySeries.map(day => <tr key={day.date} className="border-b border-slate-100">
                   <th scope="row" className="whitespace-nowrap p-2 font-normal">{day.date}</th>
-                  {[day.incomePaise, day.expensesPaise, day.netPaise].map((value, index) => <td key={index} className="whitespace-nowrap p-2">{recorded.has(day.date) ? money(value) : '—'}</td>)}
-                  <td className="p-2">{recorded.has(day.date) ? 'Entries present; completeness unknown' : 'No entries'}</td>
+                  {[day.incomePaise, day.expensesPaise, day.netPaise].map((value, index) => <td key={index} className="whitespace-nowrap p-2">{recorded.has(day.date) || dayStatuses[day.date] === 'complete' || (index === 0 && dayStatuses[day.date] === 'no_work') ? money(value) : '—'}</td>)}
+                  <td className="p-2">{statusLabel(day.date)}</td>
                 </tr>)}</tbody>
               </table>
             </div>
@@ -85,7 +96,7 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
         </ul> : <p className="mt-4 text-sm text-slate-500">{hasRecords ? 'No expense entries in this period.' : 'No transaction entries in this period.'}</p>}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2" aria-label="Pending analytics integrations">
+      <section className="grid gap-4 md:grid-cols-2" aria-label="Savings and recorded-day analysis">
         <article className={panel}>
           <h2 className="text-lg font-bold text-slate-900">Savings summary</h2>
           <p className="mt-3 font-medium text-slate-700">Unavailable — allocation data not connected</p>
@@ -93,8 +104,24 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
         </article>
         <article className={panel}>
           <h2 className="text-lg font-bold text-slate-900">Best / worst recorded earning days</h2>
-          <p className="mt-3 font-medium text-slate-700">Unavailable — recorded-day analysis pending</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">This requires Member 4’s day-analysis output and logging-completeness rules. Days with missing entries are not ranked as zero-earning days.</p>
+          <p className="mt-2 text-sm text-slate-600">Uses recorded cash income on completed workdays only, including any repayments. No-work, incomplete and missing days are not ranked.</p>
+          {dayAnalysis.status === 'error' ? <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+            <p className="font-semibold">Daily analysis needs attention</p>
+            <p className="mt-1">{dayAnalysis.message}</p>
+            <p className="mt-2">Review daily statuses in Shifts &amp; Work Sessions, then use Refresh records above. Transaction totals remain available.</p>
+          </div> : <>
+            <p className="mt-3 text-sm text-slate-600">{dayAnalysis.result.eligibleDayCount} completed workdays · {dayAnalysis.result.noWorkDayCount} no-work days · {dayAnalysis.result.incompleteDayCount} incomplete · {dayAnalysis.result.missingDayCount} missing</p>
+            <p className="mt-1 text-xs text-slate-500">Under the current calculation rules, today is counted as incomplete unless marked complete.</p>
+            {dayAnalysis.result.bestRecordedDays?.length ? <div className="mt-4 space-y-4">
+              <div><h3 className="font-semibold text-teal-800">Best recorded day(s)</h3><ul>{dayAnalysis.result.bestRecordedDays.map(day => <li key={day.date} className="mt-1 text-sm">{day.date}: {money(day.incomePaise)}</li>)}</ul></div>
+              <div><h3 className="font-semibold text-slate-800">Worst recorded day(s)</h3><ul>{dayAnalysis.result.worstRecordedDays?.map(day => <li key={day.date} className="mt-1 text-sm">{day.date}: {money(day.incomePaise)}</li>)}</ul></div>
+              {dayAnalysis.result.bestEqualsWorst && <p className="text-sm text-slate-600">Best and worst match because there is one completed workday, or all completed workdays have equal income.</p>}
+            </div> : <p className="mt-4 text-sm text-slate-600">No completed workdays in this period. Mark a genuinely finished workday complete to include it. Completed ₹0 days are eligible.</p>}
+            <dl className="mt-4 space-y-2 border-t border-slate-200 pt-3 text-sm">
+              <div><dt>Average per recorded workday</dt><dd className="font-semibold">{dayAnalysis.result.averageIncomePerRecordedWorkday ? money(dayAnalysis.result.averageIncomePerRecordedWorkday.averagePaise) : 'Unavailable — no completed workdays'}</dd></div>
+              <div><dt>Average per fully logged calendar day</dt><dd className="font-semibold">{dayAnalysis.result.averageIncomePerFullyLoggedCalendarDay ? money(dayAnalysis.result.averageIncomePerFullyLoggedCalendarDay.averagePaise) : 'Unavailable — no fully logged days'}</dd></div>
+            </dl>
+          </>}
         </article>
       </section>
     </div>
@@ -123,7 +150,7 @@ export function OverviewPage() {
   useEffect(() => {
     const refresh = () => setRevision(value => value + 1)
     const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === STORAGE_KEYS.TRANSACTIONS || event.key === STORAGE_KEYS.PROFILE) refresh()
+      if (event.key === null || event.key === STORAGE_KEYS.TRANSACTIONS || event.key === STORAGE_KEYS.PROFILE || event.key === STORAGE_KEYS.DAY_LOGS) refresh()
     }
     window.addEventListener('focus', refresh)
     window.addEventListener('storage', onStorage)
