@@ -127,8 +127,7 @@ function AnalysisResults({ data }: { data: AnalysisView }) {
     </div>
   )
 }
-
-export function OverviewPage() {
+export function FinancialAnalysisPage() {
   const [period, setPeriod] = useState<AnalysisPeriod>('week')
   const [endDate, setEndDate] = useState(getTodayIST)
   const [revision, setRevision] = useState(0)
