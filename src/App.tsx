@@ -1,11 +1,36 @@
+<<<<<<< HEAD
 import { useState } from 'react'
 import { calculateBillGap } from './engine/cashflow'
 import BillsAndGoals from './components/BillsAndGoals'
 import { demoProjection } from './demo/scenario'
+=======
+import { useState, useEffect, useCallback } from 'react'
+import type { NavTabId } from './components/navigation'
+import { Layout } from './components/Layout'
+import { OverviewPage } from './pages/OverviewPage'
+import { ShiftsPage } from './pages/ShiftsPage'
+import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
+import { BillsVaultsPage } from './pages/BillsVaultsPage'
+import { UdhaarPage } from './pages/UdhaarPage'
+import { DataProvider } from './context/DataContext'
+>>>>>>> ebf21e9b69980f12d5c69033384afa7032addf21
 
-const rupees = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100)
+function getInitialTab(): NavTabId {
+  const hash = window.location.hash.replace('#', '')
+  if (
+    hash === 'overview' ||
+    hash === 'shifts' ||
+    hash === 'income-expenses' ||
+    hash === 'bills-vaults' ||
+    hash === 'udhaar'
+  ) {
+    return hash
+  }
+  return 'overview'
+}
 
 export default function App() {
+<<<<<<< HEAD
   // Mock profile – in real app this would come from auth service
   const mockProfile = {
     id: 'profile-1',
@@ -46,5 +71,47 @@ export default function App() {
 
       <footer className="mt-8 text-sm leading-6 text-slate-500">Starter only: onboarding, shift history, daily cash-flow forecasting, persistence, authentication and Hindi translation are team tasks. No account connection or bank transfer is performed.</footer>
     </main>
+=======
+  const [activeTab, setActiveTab] = useState<NavTabId>(getInitialTab)
+
+  const handleSelectTab = useCallback((tab: NavTabId) => {
+    setActiveTab(tab)
+    window.location.hash = tab
+  }, [])
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveTab(getInitialTab())
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [])
+
+  const renderCurrentPage = () => {
+    switch (activeTab) {
+      case 'overview':
+        return <OverviewPage />
+      case 'shifts':
+        return <ShiftsPage />
+      case 'income-expenses':
+        return <IncomeExpensesPage />
+      case 'bills-vaults':
+        return <BillsVaultsPage />
+      case 'udhaar':
+        return <UdhaarPage />
+      default:
+        return <OverviewPage />
+    }
+  }
+
+  return (
+    <DataProvider>
+      <Layout activeTab={activeTab} onSelectTab={handleSelectTab}>
+        {renderCurrentPage()}
+      </Layout>
+    </DataProvider>
+>>>>>>> ebf21e9b69980f12d5c69033384afa7032addf21
   )
 }
