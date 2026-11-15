@@ -321,3 +321,21 @@ export interface InAppReminder {
   dismissed?: boolean
   createdAt: string
 }
+
+export type GigWorkerJob =
+  | 'food-delivery'
+  | 'quick-commerce'
+  | 'bike-taxi'
+  | 'cab-driver'
+  | 'freelancer'
+  | 'other'
+
+export interface DemoUser {
+  id: string
+  name: string
+  email: string
+  age: number
+  job: GigWorkerJob
+  platform: string
+  onboardingComplete: boolean
+}

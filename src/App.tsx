@@ -1,19 +1,52 @@
+
 import { useCallback, useEffect, useState } from 'react'
 import type { NavTabId } from './components/navigation'
+import type { DemoUser } from './types'
+
 import { Layout } from './components/Layout'
-import BillsAndGoals from './components/BillsAndGoals'
 import SaathiAssistant from './components/SaathiAssistant'
 
 import { OverviewPage } from './pages/OverviewPage'
 import { FinancialAnalysisPage } from './pages/FinancialAnalysisPage'
 import { ShiftsPage } from './pages/ShiftsPage'
 import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
+import BillsAndGoals from './components/BillsAndGoals'
+import { useProfile } from './hooks/useData'
 import { UdhaarPage } from './pages/UdhaarPage'
+import { LoginPage } from './pages/LoginPage'
+import { OnboardingPage } from './pages/OnboardingPage'
 
 import { DataProvider } from './context/DataContext'
-import { useProfile } from './hooks/useData'
 
 type AppPage = NavTabId | 'financial-analysis'
+type AuthStep = 'login' | 'onboarding' | 'dashboard'
+
+const USER_KEY = 'incomeflow:demo:user'
+const SESSION_KEY = 'incomeflow:demo:session'
+
+function readSavedUser(): DemoUser | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    if (!raw) return null
+
+    const user: unknown = JSON.parse(raw)
+
+    if (
+      typeof user === 'object' &&
+      user !== null &&
+      'email' in user &&
+      typeof user.email === 'string' &&
+      'onboardingComplete' in user &&
+      user.onboardingComplete === true
+    ) {
+      return user as DemoUser
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
 
 function getInitialPage(): AppPage {
   const hash = window.location.hash.replace('#', '')
@@ -38,50 +71,73 @@ function getInitialPage(): AppPage {
 function BillsAndGoalsPage() {
   const { profile, loading, error } = useProfile()
 
-  if (loading) {
-    return (
-      <section
-        role="status"
-        className="rounded-2xl border border-slate-200 bg-white p-6"
-      >
-        Loading your profile…
-      </section>
-    )
-  }
+  if (loading) return <section role="status">Loading your profile...</section>
 
   if (error) {
-    return (
-      <section
-        role="alert"
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900"
-      >
-        <h1 className="text-xl font-semibold">
-          Could not load bills and goals
-        </h1>
-        <p className="mt-2">{error}</p>
-      </section>
-    )
+    return <section role="alert">Could not load bills and goals: {error}</section>
   }
 
   if (!profile) {
-    return (
-      <section
-        role="status"
-        className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950"
-      >
-        <h1 className="text-xl font-semibold">Bills &amp; Vaults</h1>
-        <p className="mt-2">
-          A saved profile is required before bills and goals can load.
-        </p>
-      </section>
-    )
+    return <section role="status">A saved profile is required.</section>
   }
 
   return <BillsAndGoals profile={profile} />
 }
 
 export default function App() {
-  const [activePage, setActivePage] = useState<AppPage>(getInitialPage)
+  const [savedUser, setSavedUser] = useState<DemoUser | null>(
+    readSavedUser
+  )
+
+  const [email, setEmail] = useState('')
+
+  const [authStep, setAuthStep] = useState<AuthStep>(() => {
+    const user = readSavedUser()
+    const session = localStorage.getItem(SESSION_KEY)
+
+    return user && session === user.email
+      ? 'dashboard'
+      : 'login'
+  })
+
+  const [activePage, setActivePage] = useState<AppPage>(
+    getInitialPage
+  )
+
+  const handleLogin = (loginEmail: string) => {
+    const normalizedEmail = loginEmail.trim().toLowerCase()
+    setEmail(normalizedEmail)
+
+    if (
+      savedUser &&
+      savedUser.email.toLowerCase() === normalizedEmail &&
+      savedUser.onboardingComplete
+    ) {
+      localStorage.setItem(SESSION_KEY, savedUser.email)
+      setAuthStep('dashboard')
+      return
+    }
+
+    setAuthStep('onboarding')
+  }
+
+  const handleOnboardingComplete = (user: DemoUser) => {
+    localStorage.setItem(USER_KEY, JSON.stringify(user))
+    localStorage.setItem(SESSION_KEY, user.email)
+
+    setSavedUser(user)
+    setAuthStep('dashboard')
+    setActivePage('overview')
+    window.location.hash = 'overview'
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem(SESSION_KEY)
+    setAuthStep('login')
+    setEmail('')
+    setActivePage('overview')
+    window.location.hash = 'overview'
+  }
 
   const handleSelectTab = useCallback((tab: NavTabId) => {
     setActivePage(tab)
@@ -125,16 +181,56 @@ export default function App() {
     }
   }
 
+  if (authStep === 'login') {
+    return <LoginPage onContinue={handleLogin} />
+  }
+
+  if (authStep === 'onboarding') {
+    return (
+      <OnboardingPage
+        email={email}
+        onComplete={handleOnboardingComplete}
+      />
+    )
+  }
+
   const activeNavTab: NavTabId =
-    activePage === 'financial-analysis' ? 'overview' : activePage
+    activePage === 'financial-analysis'
+      ? 'overview'
+      : activePage
 
   return (
     <DataProvider>
-      <Layout activeTab={activeNavTab} onSelectTab={handleSelectTab}>
-        {renderCurrentPage()}
-      </Layout>
+      <div className="relative">
+        <Layout
+          activeTab={activeNavTab}
+          onSelectTab={handleSelectTab}
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-100 bg-teal-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-teal-900">
+                Welcome, {savedUser?.name || 'Gig Worker'}!
+              </p>
 
-      <SaathiAssistant />
+              <p className="text-xs text-teal-700">
+                {savedUser?.platform} · Demo Account
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg border border-teal-300 bg-white px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-100"
+            >
+              Logout
+            </button>
+          </div>
+
+          {renderCurrentPage()}
+        </Layout>
+
+        <SaathiAssistant />
+      </div>
     </DataProvider>
   )
 }
