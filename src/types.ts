@@ -1,3 +1,4 @@
+
 /** Draft shared contract. Money = integer paise. Dates = local YYYY-MM-DD. */
 export type MoneyPaise = number
 export type LocalDate = string
@@ -7,6 +8,43 @@ export interface Bill { id: string; profileId: string; label: string; amountPais
 export interface ShiftLog { id: string; profileId: string; date: LocalDate; slot: TimeSlot; hours: number; grossEarningsPaise: MoneyPaise; workCostsPaise: MoneyPaise }
 export interface PlannedExpense { id: string; profileId: string; date: LocalDate; label: string; amountPaise: MoneyPaise }
 export interface WorkAvailability { date: LocalDate; availableSlots: TimeSlot[]; maxHours: number }
+export interface Customer {
+  id: string
+  profileId?: string
+  name: string
+  contact: string
+  note?: string
+  createdAt: LocalDate
+  isArchived?: boolean
+  archivedAt?: LocalDate
+}
+export type UdhaarStatus = 'pending' | 'due-today' | 'overdue' | 'settled'
+export type PaymentMode = 'cash' | 'digital'
+export interface UdhaarEntry {
+  id: string
+  profileId: string
+  customerId: string
+  originalAmountPaise: MoneyPaise
+  repaidAmountPaise?: MoneyPaise
+  description: string
+  entryDate: LocalDate
+  dueDate: LocalDate
+  isSettled?: boolean
+  settledAt?: LocalDate
+  createdAt?: string
+}
+export interface RepaymentRecord {
+  id: string
+  profileId: string
+  udhaarId: string
+  customerId: string
+  amountPaise: MoneyPaise
+  date: LocalDate
+  paymentMode: PaymentMode
+  transactionId: string
+  note?: string
+  createdAt?: string
+}
 export interface ForecastAssumptions { source: 'user-assumption' | 'historical-baseline'; typicalNetHourlyPaise: MoneyPaise; conservativeNetHourlyPaise: MoneyPaise; comparableShiftCount: number }
 export interface PlanResult {
   currentCashPaise: MoneyPaise
@@ -19,6 +57,7 @@ export interface PlanResult {
   explanation: string
 }
 
+// Member 4 financial summary contract. Append once; preserve existing types.
 export type TransactionType = 'income' | 'expense'
 
 export interface Transaction {
@@ -66,11 +105,10 @@ export interface FinancialSummaryInput {
   transactions?: Transaction[]
 }
 
+
 export type DayStatus = 'complete' | 'no_work' | 'incomplete'
 
 export interface DayLog {
   date: LocalDate
   status: DayStatus
 }
-
-
