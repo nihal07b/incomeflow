@@ -235,6 +235,138 @@ describe('summary agreement: loadFinancialAnalysis vs calculateTransactionSummar
       (txSummary.cashExpensePaise + txSummary.digitalExpensePaise)
     ).toBe(-75000)
   })
+
+  it('agrees on zero-amount income transaction and counts it as a recorded day', async () => {
+    // Arithmetic & Hand Calculations:
+    // Period: 2026-11-09 to 2026-11-14
+    // Records:
+    // - zero-inc (2026-11-10): income 0 paise, cash
+    // - t-exp (2026-11-11): expense 35,000 paise (₹350), digital
+    //
+    // Deduplicated Totals:
+    // Total Income = 0 paise (Cash: 0, Digital: 0)
+    // Total Expenses = 35,000 paise (Cash: 0, Digital: 35,000)
+    // Net Cash Flow = 0 - 35,000 = -35,000 paise (-₹350)
+    // Splits:
+    // Cash Income + Digital Income = 0 + 0 = 0 paise
+    // Cash Expense + Digital Expense = 0 + 35,000 = 35,000 paise
+    //
+    // Recorded days verification:
+    // A zero-amount income transaction still counts as an explicit financial record on 2026-11-10.
+    const records: TransactionRecord[] = [
+      transaction('zero-inc', '2026-11-10', 'income', 0, defaultProfileId, 'cash', 'other income'),
+      transaction('t-exp', '2026-11-11', 'expense', 35000, defaultProfileId, 'digital', 'fuel'),
+    ]
+
+    const analysis = await loadFinancialAnalysis(period, endDate, service(records))
+    const filteredRecords = prepareRecordsForComparison(records, defaultProfileId, startDate, endDate)
+    const txSummary = calculateTransactionSummary(filteredRecords)
+
+    expect(analysis.summary.periodIncomePaise).toBe(0)
+    expect(analysis.summary.periodExpensesPaise).toBe(35000)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(-35000)
+
+    expect(analysis.summary.periodIncomePaise).toBe(txSummary.totalIncomePaise)
+    expect(analysis.summary.periodExpensesPaise).toBe(txSummary.totalExpensePaise)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(txSummary.netCashFlowPaise)
+
+    expect(txSummary.cashIncomePaise + txSummary.digitalIncomePaise).toBe(0)
+    expect(txSummary.cashExpensePaise + txSummary.digitalExpensePaise).toBe(35000)
+
+    // A zero-amount income still counts as a recorded day
+    expect(analysis.hasRecords).toBe(true)
+    expect(analysis.recordedDates).toContain('2026-11-10')
+    expect(analysis.recordedDates).toContain('2026-11-11')
+    expect(txSummary.incomeCount).toBe(1)
+  })
+
+  it('agrees on zero-amount expense transaction and counts it as a recorded day', async () => {
+    // Arithmetic & Hand Calculations:
+    // Period: 2026-11-09 to 2026-11-14
+    // Records:
+    // - t-inc (2026-11-10): income 85,000 paise (₹850), cash
+    // - zero-exp (2026-11-12): expense 0 paise, digital
+    //
+    // Deduplicated Totals:
+    // Total Income = 85,000 paise (Cash: 85,000, Digital: 0)
+    // Total Expenses = 0 paise (Cash: 0, Digital: 0)
+    // Net Cash Flow = 85,000 - 0 = 85,000 paise (+₹850)
+    // Splits:
+    // Cash Income + Digital Income = 85,000 + 0 = 85,000 paise
+    // Cash Expense + Digital Expense = 0 + 0 = 0 paise
+    //
+    // Recorded days verification:
+    // A zero-amount expense transaction still counts as an explicit financial record on 2026-11-12.
+    const records: TransactionRecord[] = [
+      transaction('t-inc', '2026-11-10', 'income', 85000, defaultProfileId, 'cash', 'delivery earnings'),
+      transaction('zero-exp', '2026-11-12', 'expense', 0, defaultProfileId, 'digital', 'maintenance'),
+    ]
+
+    const analysis = await loadFinancialAnalysis(period, endDate, service(records))
+    const filteredRecords = prepareRecordsForComparison(records, defaultProfileId, startDate, endDate)
+    const txSummary = calculateTransactionSummary(filteredRecords)
+
+    expect(analysis.summary.periodIncomePaise).toBe(85000)
+    expect(analysis.summary.periodExpensesPaise).toBe(0)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(85000)
+
+    expect(analysis.summary.periodIncomePaise).toBe(txSummary.totalIncomePaise)
+    expect(analysis.summary.periodExpensesPaise).toBe(txSummary.totalExpensePaise)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(txSummary.netCashFlowPaise)
+
+    expect(txSummary.cashIncomePaise + txSummary.digitalIncomePaise).toBe(85000)
+    expect(txSummary.cashExpensePaise + txSummary.digitalExpensePaise).toBe(0)
+
+    // A zero-amount expense still counts as a recorded day
+    expect(analysis.hasRecords).toBe(true)
+    expect(analysis.recordedDates).toContain('2026-11-10')
+    expect(analysis.recordedDates).toContain('2026-11-12')
+    expect(txSummary.expenseCount).toBe(1)
+  })
+
+  it('agrees on a set containing only zero amounts and counts all as recorded days', async () => {
+    // Arithmetic & Hand Calculations:
+    // Period: 2026-11-09 to 2026-11-14
+    // Records:
+    // - zero-inc (2026-11-10): income 0 paise, cash
+    // - zero-exp (2026-11-12): expense 0 paise, digital
+    //
+    // Deduplicated Totals:
+    // Total Income = 0 paise (Cash: 0, Digital: 0)
+    // Total Expenses = 0 paise (Cash: 0, Digital: 0)
+    // Net Cash Flow = 0 - 0 = 0 paise
+    // Splits:
+    // Cash Income + Digital Income = 0 + 0 = 0 paise
+    // Cash Expense + Digital Expense = 0 + 0 = 0 paise
+    //
+    // Recorded days verification:
+    // Even though all amounts are 0 paise, transactions exist on 2026-11-10 and 2026-11-12,
+    // so hasRecords is true and both dates count as recorded days.
+    const records: TransactionRecord[] = [
+      transaction('zero-inc', '2026-11-10', 'income', 0, defaultProfileId, 'cash', 'other income'),
+      transaction('zero-exp', '2026-11-12', 'expense', 0, defaultProfileId, 'digital', 'maintenance'),
+    ]
+
+    const analysis = await loadFinancialAnalysis(period, endDate, service(records))
+    const filteredRecords = prepareRecordsForComparison(records, defaultProfileId, startDate, endDate)
+    const txSummary = calculateTransactionSummary(filteredRecords)
+
+    expect(analysis.summary.periodIncomePaise).toBe(0)
+    expect(analysis.summary.periodExpensesPaise).toBe(0)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(0)
+
+    expect(analysis.summary.periodIncomePaise).toBe(txSummary.totalIncomePaise)
+    expect(analysis.summary.periodExpensesPaise).toBe(txSummary.totalExpensePaise)
+    expect(analysis.summary.netRecordedCashFlowPaise).toBe(txSummary.netCashFlowPaise)
+
+    expect(txSummary.cashIncomePaise + txSummary.digitalIncomePaise).toBe(0)
+    expect(txSummary.cashExpensePaise + txSummary.digitalExpensePaise).toBe(0)
+
+    // Both zero-amount transactions still count as recorded days
+    expect(analysis.hasRecords).toBe(true)
+    expect(analysis.recordedDates).toEqual(['2026-11-10', '2026-11-12'])
+    expect(txSummary.transactionCount).toBe(2)
+  })
 })
 
 describe('period vs all-time comparison', () => {
