@@ -1,0 +1,14 @@
+ incomeflow@0.0.0                        |   0
+ npm                                     |   0
+ src/App.tsx                             |  17 [32m++[m
+ src/components/AddContributionModal.tsx | 184 [32m++++++++++++++++++[m
+ src/components/BillCard.tsx             | 179 [32m++++++++++++++++++[m
+ src/components/BillsAndGoals.tsx        | 326 [32m++++++++++++++++++++++++++++++++[m
+ src/components/CreateBillModal.tsx      | 183 [32m++++++++++++++++++[m
+ src/engine/goals.test.ts                | 256 [32m+++++++++++++++++++++++++[m
+ src/engine/goals.ts                     | 201 [32m++++++++++++++++++++[m
+ src/services/mockData.ts                | 218 [32m+++++++++++++++++++++[m
+ src/types.ts                            |  56 [32m++++++[m
+ tsc                                     |   0
+ vitest                                  |   0
+ 13 files changed, 1620 insertions(+)

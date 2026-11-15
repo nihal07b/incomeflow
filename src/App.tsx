@@ -10,7 +10,8 @@ import { OverviewPage } from './pages/OverviewPage'
 import { FinancialAnalysisPage } from './pages/FinancialAnalysisPage'
 import { ShiftsPage } from './pages/ShiftsPage'
 import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
-import { BillsVaultsPage } from './pages/BillsVaultsPage'
+import BillsAndGoals from './components/BillsAndGoals'
+import { useProfile } from './hooks/useData'
 import { UdhaarPage } from './pages/UdhaarPage'
 import { LoginPage } from './pages/LoginPage'
 import { OnboardingPage } from './pages/OnboardingPage'
@@ -65,6 +66,22 @@ function getInitialPage(): AppPage {
   }
 
   return 'overview'
+}
+
+function BillsAndGoalsPage() {
+  const { profile, loading, error } = useProfile()
+
+  if (loading) return <section role="status">Loading your profile...</section>
+
+  if (error) {
+    return <section role="alert">Could not load bills and goals: {error}</section>
+  }
+
+  if (!profile) {
+    return <section role="status">A saved profile is required.</section>
+  }
+
+  return <BillsAndGoals profile={profile} />
 }
 
 export default function App() {
@@ -154,7 +171,7 @@ export default function App() {
         return <IncomeExpensesPage />
 
       case 'bills-vaults':
-        return <BillsVaultsPage />
+        return <BillsAndGoalsPage />
 
       case 'udhaar':
         return <UdhaarPage />
