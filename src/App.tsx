@@ -1,15 +1,17 @@
-
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { NavTabId } from './components/navigation'
 import { Layout } from './components/Layout'
+import BillsAndGoals from './components/BillsAndGoals'
+import SaathiAssistant from './components/SaathiAssistant'
+
 import { OverviewPage } from './pages/OverviewPage'
 import { FinancialAnalysisPage } from './pages/FinancialAnalysisPage'
 import { ShiftsPage } from './pages/ShiftsPage'
 import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
-import { BillsVaultsPage } from './pages/BillsVaultsPage'
 import { UdhaarPage } from './pages/UdhaarPage'
+
 import { DataProvider } from './context/DataContext'
-import SaathiAssistant from './components/SaathiAssistant'
+import { useProfile } from './hooks/useData'
 
 type AppPage = NavTabId | 'financial-analysis'
 
@@ -31,6 +33,51 @@ function getInitialPage(): AppPage {
   }
 
   return 'overview'
+}
+
+function BillsAndGoalsPage() {
+  const { profile, loading, error } = useProfile()
+
+  if (loading) {
+    return (
+      <section
+        role="status"
+        className="rounded-2xl border border-slate-200 bg-white p-6"
+      >
+        Loading your profile…
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section
+        role="alert"
+        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900"
+      >
+        <h1 className="text-xl font-semibold">
+          Could not load bills and goals
+        </h1>
+        <p className="mt-2">{error}</p>
+      </section>
+    )
+  }
+
+  if (!profile) {
+    return (
+      <section
+        role="status"
+        className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-950"
+      >
+        <h1 className="text-xl font-semibold">Bills &amp; Vaults</h1>
+        <p className="mt-2">
+          A saved profile is required before bills and goals can load.
+        </p>
+      </section>
+    )
+  }
+
+  return <BillsAndGoals profile={profile} />
 }
 
 export default function App() {
@@ -68,7 +115,7 @@ export default function App() {
         return <IncomeExpensesPage />
 
       case 'bills-vaults':
-        return <BillsVaultsPage />
+        return <BillsAndGoalsPage />
 
       case 'udhaar':
         return <UdhaarPage />
@@ -86,6 +133,7 @@ export default function App() {
       <Layout activeTab={activeNavTab} onSelectTab={handleSelectTab}>
         {renderCurrentPage()}
       </Layout>
+
       <SaathiAssistant />
     </DataProvider>
   )
