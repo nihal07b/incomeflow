@@ -1,3 +1,4 @@
+import { DayStatusLogger } from '../components/DayStatusLogger'
 import { useProfile } from '../hooks/useData'
 import { useState, useEffect, useId } from 'react'
 import type { ShiftLog, TimeSlot, LocalDate } from '../types'
@@ -185,6 +186,7 @@ export function ShiftsPage() {
 
   return (
     <div className="space-y-8">
+      <DayStatusLogger />
       {/* Page Header */}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
@@ -269,8 +271,8 @@ export function ShiftsPage() {
 
         <div
           className={`rounded-2xl border p-5 shadow-sm ${summary.totalNetPaise < 0
-              ? 'border-rose-200 bg-rose-50/50'
-              : 'border-teal-200 bg-teal-50/50'
+            ? 'border-rose-200 bg-rose-50/50'
+            : 'border-teal-200 bg-teal-50/50'
             }`}
         >
           <p className="text-xs font-medium text-slate-600">Net Take-Home</p>
@@ -455,8 +457,8 @@ export function ShiftsPage() {
             <div className="flex flex-col justify-end">
               <div
                 className={`rounded-xl border p-3 ${previewNetPaise < 0
-                    ? 'border-rose-200 bg-rose-50/60 text-rose-950'
-                    : 'border-teal-200 bg-teal-50/60 text-teal-950'
+                  ? 'border-rose-200 bg-rose-50/60 text-rose-950'
+                  : 'border-teal-200 bg-teal-50/60 text-teal-950'
                   }`}
               >
                 <div className="flex items-center justify-between text-xs">

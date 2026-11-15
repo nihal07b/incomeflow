@@ -1,4 +1,4 @@
-import type { Profile, ShiftLog } from '../types'
+import type { Profile, ShiftLog, DayLog, LocalDate } from '../types'
 import type { TransactionRecord } from './storage'
 import {
   storageService,
@@ -12,6 +12,7 @@ export interface DataStoreState {
   profile: Profile | null
   shifts: ShiftLog[]
   transactions: TransactionRecord[]
+  dayLogs: DayLog[]
   loading: boolean
   error: string | null
   shiftSummary: ShiftSummary
@@ -50,6 +51,7 @@ export class DataStore {
     profile: null,
     shifts: [],
     transactions: [],
+    dayLogs: [],
     loading: true,
     error: null,
     shiftSummary: initialShiftSummary,
@@ -70,7 +72,8 @@ export class DataStore {
           (event.key === STORAGE_KEYS.PROFILE ||
             event.key === STORAGE_KEYS.SHIFTS ||
             event.key === STORAGE_KEYS.TRANSACTIONS ||
-            event.key === STORAGE_KEYS.EXPENSES)
+            event.key === STORAGE_KEYS.EXPENSES ||
+            event.key === STORAGE_KEYS.DAY_LOGS)
         ) {
           void this.refresh()
         }
@@ -112,19 +115,22 @@ export class DataStore {
       this.state = { ...this.state, loading: true, error: null }
       this.notify()
 
-      const [profile, shifts, transactions] = await Promise.all([
+      const [profile, shifts, transactions, dayLogs] = await Promise.all([
         this.service.getProfile(),
         this.service.getShifts(),
         this.service.getTransactions(),
+        this.service.getDayLogs(),
       ])
 
       const sortedShifts = [...shifts].sort((a, b) => b.date.localeCompare(a.date))
       const sortedTxs = [...transactions].sort((a, b) => b.date.localeCompare(a.date))
+      const sortedDayLogs = [...dayLogs].sort((a, b) => b.date.localeCompare(a.date))
 
       this.state = {
         profile,
         shifts: sortedShifts,
         transactions: sortedTxs,
+        dayLogs: sortedDayLogs,
         loading: false,
         error: null,
         shiftSummary: calculateShiftSummary(sortedShifts),
@@ -244,6 +250,40 @@ export class DataStore {
         ...this.state,
         transactions: updatedTxs,
         transactionSummary: calculateTransactionSummary(updatedTxs),
+      }
+      this.notify()
+    }
+    return deleted
+  }
+
+  // Day Log operations
+  public async upsertDayLog(dayLog: DayLog): Promise<DayLog> {
+    const upserted = await this.service.upsertDayLog(dayLog)
+    const existing = this.state.dayLogs
+    const index = existing.findIndex((d) => d.date === upserted.date)
+    let updatedList: DayLog[]
+    if (index >= 0) {
+      updatedList = [...existing]
+      updatedList[index] = upserted
+    } else {
+      updatedList = [upserted, ...existing]
+    }
+    const sorted = updatedList.sort((a, b) => b.date.localeCompare(a.date))
+    this.state = {
+      ...this.state,
+      dayLogs: sorted,
+    }
+    this.notify()
+    return upserted
+  }
+
+  public async deleteDayLog(date: LocalDate): Promise<boolean> {
+    const deleted = await this.service.deleteDayLog(date)
+    if (deleted) {
+      const updated = this.state.dayLogs.filter((d) => d.date !== date)
+      this.state = {
+        ...this.state,
+        dayLogs: updated,
       }
       this.notify()
     }

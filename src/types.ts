@@ -57,6 +57,7 @@ export interface PlanResult {
   explanation: string
 }
 
+
 // Member 4 financial summary contract. Append once; preserve existing types.
 export type TransactionType = 'income' | 'expense'
 
@@ -139,6 +140,7 @@ export interface InAppReminder {
   dismissed?: boolean
   createdAt: string
 }
+
 export type DayStatus = 'complete' | 'no_work' | 'incomplete'
 
 export interface DayLog {
