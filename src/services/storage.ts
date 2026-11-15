@@ -1,20 +1,35 @@
 import type {
-  Profile,
-  ShiftLog,
-  PlannedExpense,
+  DayLog,
+  DayStatus,
+  Customer,
   LocalDate,
   MoneyPaise,
+  PaymentMode,
+  PlannedExpense,
+  Profile,
+  RepaymentRecord,
+  ShiftLog,
   TimeSlot,
+  UdhaarEntry,
+  UdhaarStatus
 } from '../types'
 
 /**
  * Storage Keys — Namespaced and versioned (incomeflow:v1:*)
  */
 export const STORAGE_KEYS = {
+  DAY_LOGS: 'incomeflow:v1:daylogs',
   PROFILE: 'incomeflow:v1:profile',
   SHIFTS: 'incomeflow:v1:shifts',
   EXPENSES: 'incomeflow:v1:expenses',
   TRANSACTIONS: 'incomeflow:v1:transactions',
+  CUSTOMERS: 'incomeflow:v1:customers',
+  UDHAAR: 'incomeflow:v1:udhaar',
+  REPAYMENTS: 'incomeflow:v1:repayments',
+  PROCESSED_REQUESTS: 'incomeflow:v1:processed_requests',
+  BILLS: 'incomeflow:v1:bills',
+  REMINDER_PREFERENCES: 'incomeflow:v1:reminder_preferences',
+  DISMISSED_REMINDERS: 'incomeflow:v1:dismissed_reminders',
 } as const
 
 export type StorageKey = typeof STORAGE_KEYS[keyof typeof STORAGE_KEYS]
@@ -94,8 +109,7 @@ export class StorageCorruptionError extends StorageError {
 
   constructor(key: string, rawValue: string, details?: string) {
     super(
-      `Corrupted data found in storage for key "${key}". Raw value was preserved and not overwritten.${
-        details ? ` Details: ${details}` : ''
+      `Corrupted data found in storage for key "${key}". Raw value was preserved and not overwritten.${details ? ` Details: ${details}` : ''
       }`
     )
     this.name = 'StorageCorruptionError'
@@ -290,6 +304,7 @@ export function validatePlannedExpense(expense: unknown): ExpenseRecord {
 export const TRANSACTION_INCOME_CATEGORIES = [
   'delivery earnings',
   'other income',
+  'repayment',
 ] as const
 export type TransactionIncomeCategory = typeof TRANSACTION_INCOME_CATEGORIES[number]
 
@@ -304,7 +319,6 @@ export type TransactionExpenseCategory = typeof TRANSACTION_EXPENSE_CATEGORIES[n
 
 export type TransactionCategory = TransactionIncomeCategory | TransactionExpenseCategory
 export type TransactionType = 'income' | 'expense'
-export type PaymentMode = 'cash' | 'digital'
 
 export interface TransactionRecord {
   id: string
@@ -315,6 +329,8 @@ export interface TransactionRecord {
   category: TransactionCategory
   paymentMode: PaymentMode
   description?: string
+  repaymentId?: string
+  udhaarId?: string
 }
 
 export function validateTransaction(transaction: unknown): TransactionRecord {
@@ -373,7 +389,351 @@ export function validateTransaction(transaction: unknown): TransactionRecord {
     result.description = t.description.trim()
   }
 
+  if (typeof t.repaymentId === 'string' && t.repaymentId.trim() !== '') {
+    result.repaymentId = t.repaymentId.trim()
+  }
+
+  if (typeof t.udhaarId === 'string' && t.udhaarId.trim() !== '') {
+    result.udhaarId = t.udhaarId.trim()
+  }
+
   return result
+}
+
+/**
+ * Labelled Mocks for Customer Records (used when backend is unavailable or for testing/demo)
+ */
+export const LABELLED_MOCK_CUSTOMERS: Customer[] = [
+  {
+    id: 'mock-cust-001',
+    name: 'Ramesh Sharma [Sample]',
+    contact: '+91 98765 43210',
+    note: 'Tea stall vendor near delivery hub - daily chai credit',
+    createdAt: '2026-11-10',
+  },
+  {
+    id: 'mock-cust-002',
+    name: 'Ramesh Sharma [Sample]', // Identical name, unique ID
+    contact: '+91 98111 22334',
+    note: 'Mechanic at Sector 18 garage - bike service credit',
+    createdAt: '2026-11-11',
+  },
+  {
+    id: 'mock-cust-003',
+    name: 'Pooja Verma [Sample]',
+    contact: '+91 98222 33445',
+    note: 'Regular parcel delivery customer',
+    createdAt: '2026-11-12',
+  },
+]
+
+export function validateCustomer(customer: unknown): Customer {
+  if (typeof customer !== 'object' || customer === null) {
+    throw new StorageValidationError('Customer must be an object')
+  }
+  const c = customer as Record<string, unknown>
+
+  if (typeof c.id !== 'string' || c.id.trim() === '') {
+    throw new StorageValidationError('Customer id must be a non-empty string', 'id')
+  }
+  if (typeof c.name !== 'string' || c.name.trim() === '') {
+    throw new StorageValidationError('Customer name must be a non-empty string', 'name')
+  }
+  if (typeof c.contact !== 'string' || c.contact.trim() === '') {
+    throw new StorageValidationError('Customer contact must be a non-empty string', 'contact')
+  }
+  if (c.note !== undefined && typeof c.note !== 'string') {
+    throw new StorageValidationError('Customer note must be a string if provided', 'note')
+  }
+  if (c.profileId !== undefined && (typeof c.profileId !== 'string' || c.profileId.trim() === '')) {
+    throw new StorageValidationError('Customer profileId must be a non-empty string if provided', 'profileId')
+  }
+  if (c.isArchived !== undefined && typeof c.isArchived !== 'boolean') {
+    throw new StorageValidationError('Customer isArchived must be a boolean if provided', 'isArchived')
+  }
+  if (c.archivedAt !== undefined && (typeof c.archivedAt !== 'string' || !isValidLocalDate(c.archivedAt))) {
+    throw new StorageValidationError('Customer archivedAt must be a valid calendar date in YYYY-MM-DD format', 'archivedAt')
+  }
+  const createdAt =
+    typeof c.createdAt === 'string' && isValidLocalDate(c.createdAt)
+      ? c.createdAt
+      : getTodayLocalDate()
+
+  return {
+    id: c.id.trim(),
+    name: c.name.trim(),
+    contact: c.contact.trim(),
+    note: typeof c.note === 'string' && c.note.trim() !== '' ? c.note.trim() : undefined,
+    profileId: typeof c.profileId === 'string' && c.profileId.trim() !== '' ? c.profileId.trim() : undefined,
+    isArchived: Boolean(c.isArchived),
+    archivedAt: typeof c.archivedAt === 'string' ? c.archivedAt : undefined,
+    createdAt,
+  }
+}
+
+/**
+ * Helper: Derive the dynamic status of an Udhaar record based on due date and settlement.
+ * States:
+ * - 'settled': explicitly settled / repaid
+ * - 'due-today': due date is today
+ * - 'overdue': due date is before today and not settled
+ * - 'pending': due date is in the future
+ */
+export function deriveUdhaarStatus(
+  entry: Pick<UdhaarEntry, 'dueDate' | 'isSettled'>,
+  today: LocalDate = getTodayLocalDate()
+): UdhaarStatus {
+  if (entry.isSettled) {
+    return 'settled'
+  }
+  if (entry.dueDate === today) {
+    return 'due-today'
+  }
+  if (entry.dueDate < today) {
+    return 'overdue'
+  }
+  return 'pending'
+}
+
+/**
+ * Helper: Calculate remaining outstanding amount in paise for an entry.
+ */
+export function getUdhaarRemainingPaise(entry: UdhaarEntry): MoneyPaise {
+  if (entry.isSettled) return 0
+  const repaid = entry.repaidAmountPaise ?? 0
+  return Math.max(0, entry.originalAmountPaise - repaid)
+}
+
+/**
+ * Helper: Calculate outstanding total in paise for non-settled Udhaar entries.
+ */
+export function calculateCustomerOutstandingPaise(
+  entries: UdhaarEntry[],
+  customerId?: string
+): MoneyPaise {
+  return entries
+    .filter((e) => (customerId ? e.customerId === customerId : true) && !e.isSettled)
+    .reduce((sum, e) => sum + getUdhaarRemainingPaise(e), 0)
+}
+
+/**
+ * Runtime validator for UdhaarEntry
+ */
+export function validateUdhaarEntry(entry: unknown): UdhaarEntry {
+  if (typeof entry !== 'object' || entry === null) {
+    throw new StorageValidationError('UdhaarEntry must be an object')
+  }
+  const u = entry as Record<string, unknown>
+
+  if (typeof u.id !== 'string' || u.id.trim() === '') {
+    throw new StorageValidationError('UdhaarEntry id must be a non-empty string', 'id')
+  }
+  if (typeof u.profileId !== 'string' || u.profileId.trim() === '') {
+    throw new StorageValidationError('UdhaarEntry profileId (user ownership) is required', 'profileId')
+  }
+  if (typeof u.customerId !== 'string' || u.customerId.trim() === '') {
+    throw new StorageValidationError('UdhaarEntry customerId is required', 'customerId')
+  }
+  if (!isSafePaise(u.originalAmountPaise, false) || (u.originalAmountPaise as number) <= 0) {
+    throw new StorageValidationError('UdhaarEntry originalAmountPaise must be a positive safe integer in paise', 'originalAmountPaise')
+  }
+  if (u.repaidAmountPaise !== undefined && (!isSafePaise(u.repaidAmountPaise, false) || (u.repaidAmountPaise as number) < 0)) {
+    throw new StorageValidationError('UdhaarEntry repaidAmountPaise must be a non-negative safe integer in paise', 'repaidAmountPaise')
+  }
+  if (typeof u.description !== 'string' || u.description.trim() === '') {
+    throw new StorageValidationError('UdhaarEntry product/service description is required', 'description')
+  }
+  if (typeof u.entryDate !== 'string' || !isValidLocalDate(u.entryDate)) {
+    throw new StorageValidationError('UdhaarEntry entryDate must be a valid calendar date in YYYY-MM-DD format', 'entryDate')
+  }
+  if (typeof u.dueDate !== 'string' || !isValidLocalDate(u.dueDate)) {
+    throw new StorageValidationError('UdhaarEntry dueDate must be a valid calendar date in YYYY-MM-DD format', 'dueDate')
+  }
+  if (u.isSettled !== undefined && typeof u.isSettled !== 'boolean') {
+    throw new StorageValidationError('UdhaarEntry isSettled must be a boolean', 'isSettled')
+  }
+  if (u.settledAt !== undefined && (typeof u.settledAt !== 'string' || !isValidLocalDate(u.settledAt))) {
+    throw new StorageValidationError('UdhaarEntry settledAt must be a valid calendar date in YYYY-MM-DD format', 'settledAt')
+  }
+
+  const repaidAmountPaise = typeof u.repaidAmountPaise === 'number' ? (u.repaidAmountPaise as MoneyPaise) : 0
+
+  return {
+    id: u.id.trim(),
+    profileId: u.profileId.trim(),
+    customerId: u.customerId.trim(),
+    originalAmountPaise: u.originalAmountPaise as MoneyPaise,
+    repaidAmountPaise,
+    description: u.description.trim(),
+    entryDate: u.entryDate,
+    dueDate: u.dueDate,
+    isSettled: Boolean(u.isSettled),
+    settledAt: typeof u.settledAt === 'string' ? u.settledAt : undefined,
+    createdAt: typeof u.createdAt === 'string' ? u.createdAt : getTodayLocalDate(),
+  }
+}
+
+/**
+ * Runtime validator for RepaymentRecord
+ */
+export function validateRepaymentRecord(repayment: unknown): RepaymentRecord {
+  if (typeof repayment !== 'object' || repayment === null) {
+    throw new StorageValidationError('RepaymentRecord must be an object')
+  }
+  const r = repayment as Record<string, unknown>
+
+  if (typeof r.id !== 'string' || r.id.trim() === '') {
+    throw new StorageValidationError('Repayment id must be a non-empty string', 'id')
+  }
+  if (typeof r.profileId !== 'string' || r.profileId.trim() === '') {
+    throw new StorageValidationError('Repayment profileId is required (user ownership)', 'profileId')
+  }
+  if (typeof r.udhaarId !== 'string' || r.udhaarId.trim() === '') {
+    throw new StorageValidationError('Repayment udhaarId is required', 'udhaarId')
+  }
+  if (typeof r.customerId !== 'string' || r.customerId.trim() === '') {
+    throw new StorageValidationError('Repayment customerId is required', 'customerId')
+  }
+  if (!isSafePaise(r.amountPaise, false) || (r.amountPaise as number) <= 0) {
+    throw new StorageValidationError('Repayment amountPaise must be a positive safe integer in paise', 'amountPaise')
+  }
+  if (typeof r.date !== 'string' || !isValidLocalDate(r.date)) {
+    throw new StorageValidationError('Repayment date must be a valid calendar date in YYYY-MM-DD format', 'date')
+  }
+  if (r.paymentMode !== 'cash' && r.paymentMode !== 'digital') {
+    throw new StorageValidationError('Repayment paymentMode must be "cash" or "digital"', 'paymentMode')
+  }
+  if (typeof r.transactionId !== 'string' || r.transactionId.trim() === '') {
+    throw new StorageValidationError('Repayment transactionId is required', 'transactionId')
+  }
+  if (r.note !== undefined && typeof r.note !== 'string') {
+    throw new StorageValidationError('Repayment note must be a string if provided', 'note')
+  }
+
+  return {
+    id: r.id.trim(),
+    profileId: r.profileId.trim(),
+    udhaarId: r.udhaarId.trim(),
+    customerId: r.customerId.trim(),
+    amountPaise: r.amountPaise as MoneyPaise,
+    date: r.date,
+    paymentMode: r.paymentMode,
+    transactionId: r.transactionId.trim(),
+    note: typeof r.note === 'string' && r.note.trim() !== '' ? r.note.trim() : undefined,
+    createdAt: typeof r.createdAt === 'string' ? r.createdAt : getTodayLocalDate(),
+  }
+}
+
+export interface RecordRepaymentParams {
+  id?: string
+  requestId?: string
+  profileId: string
+  udhaarId: string
+  amountPaise: MoneyPaise
+  date?: LocalDate
+  paymentMode?: PaymentMode
+  note?: string
+}
+
+export interface RecordRepaymentResult {
+  repayment: RepaymentRecord
+  updatedEntry: UdhaarEntry
+  transaction: TransactionRecord
+}
+
+/**
+ * Helper to compute date offset for sample mocks
+ */
+export function addDaysToLocalDate(dateStr: LocalDate, days: number): LocalDate {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + days)
+  const yyyy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
+/**
+ * Labelled Mocks for Udhaar Entries (demonstrating all 4 states)
+ */
+export function getLabelledMockUdhaarEntries(today: LocalDate = getTodayLocalDate()): UdhaarEntry[] {
+  return [
+    {
+      id: 'mock-udh-001',
+      profileId: 'profile-demo-1',
+      customerId: 'mock-cust-001', // Ramesh Sharma (Tea stall)
+      originalAmountPaise: 35000, // ₹350
+      repaidAmountPaise: 0,
+      description: 'Morning chai & bun maska khata (weekly tab)',
+      entryDate: addDaysToLocalDate(today, -3),
+      dueDate: addDaysToLocalDate(today, 4), // Future -> 'pending'
+      isSettled: false,
+    },
+    {
+      id: 'mock-udh-002',
+      profileId: 'profile-demo-1',
+      customerId: 'mock-cust-002', // Ramesh Sharma (Mechanic)
+      originalAmountPaise: 120000, // ₹1,200
+      repaidAmountPaise: 0,
+      description: 'Rear brake shoe & chain lube on credit',
+      entryDate: addDaysToLocalDate(today, -7),
+      dueDate: today, // Today -> 'due-today'
+      isSettled: false,
+    },
+    {
+      id: 'mock-udh-003',
+      profileId: 'profile-demo-1',
+      customerId: 'mock-cust-002', // Ramesh Sharma (Mechanic)
+      originalAmountPaise: 50000, // ₹500
+      repaidAmountPaise: 20000, // ₹200 partially repaid, ₹300 remaining
+      description: 'Engine oil top-up emergency borrow',
+      entryDate: addDaysToLocalDate(today, -14),
+      dueDate: addDaysToLocalDate(today, -2), // Past -> 'overdue'
+      isSettled: false,
+    },
+    {
+      id: 'mock-udh-004',
+      profileId: 'profile-demo-1',
+      customerId: 'mock-cust-003', // Pooja Verma
+      originalAmountPaise: 20000, // ₹200
+      repaidAmountPaise: 20000, // Fully repaid
+      description: 'Urgent document parcel delivery fee credit',
+      entryDate: addDaysToLocalDate(today, -10),
+      dueDate: addDaysToLocalDate(today, -5),
+      isSettled: true,
+      settledAt: addDaysToLocalDate(today, -4), // Settled -> 'settled'
+    },
+  ]
+}
+
+export const VALID_DAY_STATUSES: DayStatus[] = ['complete', 'no_work', 'incomplete']
+
+export function validateDayLog(dayLog: unknown): DayLog {
+  if (typeof dayLog !== 'object' || dayLog === null) {
+    throw new StorageValidationError('DayLog must be an object')
+  }
+  const d = dayLog as Record<string, unknown>
+
+  if (typeof d.date !== 'string' || !isValidLocalDate(d.date)) {
+    throw new StorageValidationError(
+      'DayLog date must be a valid calendar date in YYYY-MM-DD format',
+      'date'
+    )
+  }
+  if (
+    typeof d.status !== 'string' ||
+    !VALID_DAY_STATUSES.includes(d.status as DayStatus)
+  ) {
+    throw new StorageValidationError(
+      'DayLog status must be "complete", "no_work", or "incomplete"',
+      'status'
+    )
+  }
+
+  return {
+    date: d.date,
+    status: d.status as DayStatus,
+  }
 }
 
 /**
@@ -405,6 +765,34 @@ export interface StorageService {
   addTransaction(transaction: TransactionRecord): Promise<TransactionRecord>
   updateTransaction(id: string, updates: Partial<Omit<TransactionRecord, 'id'>>): Promise<TransactionRecord>
   deleteTransaction(id: string): Promise<boolean>
+
+  // Customers (Member 2 Module)
+  getCustomers(): Promise<Customer[]>
+  saveCustomers(customers: Customer[]): Promise<Customer[]>
+  addCustomer(customer: Customer): Promise<Customer>
+  updateCustomer(id: string, updates: Partial<Omit<Customer, 'id'>>): Promise<Customer>
+  archiveCustomer(id: string): Promise<Customer>
+  unarchiveCustomer(id: string): Promise<Customer>
+  deleteCustomer(id: string): Promise<boolean>
+
+  // Udhaar Entries (Member 2 Module)
+  getUdhaarEntries(customerId?: string): Promise<UdhaarEntry[]>
+  saveUdhaarEntries(entries: UdhaarEntry[]): Promise<UdhaarEntry[]>
+  addUdhaarEntry(entry: UdhaarEntry): Promise<UdhaarEntry>
+  updateUdhaarEntry(id: string, updates: Partial<Omit<UdhaarEntry, 'id' | 'profileId'>>): Promise<UdhaarEntry>
+  settleUdhaarEntry(id: string, settledAt?: LocalDate): Promise<UdhaarEntry>
+  deleteUdhaarEntry(id: string): Promise<boolean>
+
+  // Repayments (Member 2 Module)
+  getRepayments(udhaarId?: string): Promise<RepaymentRecord[]>
+  saveRepayments(repayments: RepaymentRecord[]): Promise<RepaymentRecord[]>
+  recordRepayment(params: RecordRepaymentParams): Promise<RecordRepaymentResult>
+
+  // Day Logs
+  getDayLogs(): Promise<DayLog[]>
+  saveDayLogs(dayLogs: DayLog[]): Promise<DayLog[]>
+  upsertDayLog(dayLog: DayLog): Promise<DayLog>
+  deleteDayLog(date: LocalDate): Promise<boolean>
 
   // Reset / Clear
   clearAll(): Promise<void>
@@ -826,13 +1214,498 @@ export class LocalStorageService implements StorageService {
     return true
   }
 
+  // --- Customers (Member 2 Module) ---
+
+  async getCustomers(): Promise<Customer[]> {
+    const raw = this.readRaw(STORAGE_KEYS.CUSTOMERS)
+    if (raw === null) return []
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        throw new StorageCorruptionError(STORAGE_KEYS.CUSTOMERS, raw, 'Expected array of customers')
+      }
+      return parsed.map((item) => validateCustomer(item))
+    } catch (err) {
+      if (err instanceof StorageError) throw err
+      throw new StorageCorruptionError(STORAGE_KEYS.CUSTOMERS, raw, (err as Error).message)
+    }
+  }
+
+  async saveCustomers(customers: Customer[]): Promise<Customer[]> {
+    if (!Array.isArray(customers)) {
+      throw new StorageValidationError('Customers must be an array')
+    }
+    const seenIds = new Set<string>()
+    const validatedList = customers.map((c) => {
+      const validated = validateCustomer(c)
+      if (seenIds.has(validated.id)) {
+        throw new StorageValidationError(`Duplicate customer id "${validated.id}" detected`)
+      }
+      seenIds.add(validated.id)
+      return validated
+    })
+    const json = JSON.stringify(validatedList)
+    this.writeRaw(STORAGE_KEYS.CUSTOMERS, json)
+    return validatedList
+  }
+
+  async addCustomer(customer: Customer): Promise<Customer> {
+    const validated = validateCustomer(customer)
+    const existing = await this.getCustomers()
+
+    if (existing.some((c) => c.id === validated.id)) {
+      throw new StorageValidationError(`Customer with ID "${validated.id}" already exists`)
+    }
+
+    const updated = [...existing, validated]
+    await this.saveCustomers(updated)
+    return validated
+  }
+
+  async updateCustomer(id: string, updates: Partial<Omit<Customer, 'id'>>): Promise<Customer> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid customer ID is required for update')
+    }
+
+    const existing = await this.getCustomers()
+    const index = existing.findIndex((c) => c.id === id)
+    if (index === -1) {
+      throw new StorageNotFoundError('Customer', id)
+    }
+
+    const target = existing[index]
+    const merged = {
+      ...target,
+      ...updates,
+      id,
+    }
+
+    const validated = validateCustomer(merged)
+    existing[index] = validated
+    await this.saveCustomers(existing)
+    return validated
+  }
+
+  async archiveCustomer(id: string): Promise<Customer> {
+    return this.updateCustomer(id, {
+      isArchived: true,
+      archivedAt: getTodayLocalDate(),
+    })
+  }
+
+  async unarchiveCustomer(id: string): Promise<Customer> {
+    return this.updateCustomer(id, {
+      isArchived: false,
+      archivedAt: undefined,
+    })
+  }
+
+  async deleteCustomer(id: string): Promise<boolean> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid customer ID is required for deletion')
+    }
+
+    const existing = await this.getCustomers()
+    const filtered = existing.filter((c) => c.id !== id)
+    if (filtered.length === existing.length) {
+      return false
+    }
+
+    // Crucial requirement: Financial history (Udhaar records) is NEVER deleted when removing/archiving a customer
+    await this.saveCustomers(filtered)
+    return true
+  }
+
+  // --- Udhaar Entries (Member 2 Module) ---
+
+  async getUdhaarEntries(customerId?: string): Promise<UdhaarEntry[]> {
+    const raw = this.readRaw(STORAGE_KEYS.UDHAAR)
+    if (raw === null) return []
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        throw new StorageCorruptionError(STORAGE_KEYS.UDHAAR, raw, 'Expected array of udhaar entries')
+      }
+      const validated = parsed.map((item) => validateUdhaarEntry(item))
+      if (customerId) {
+        return validated.filter((u) => u.customerId === customerId)
+      }
+      return validated
+    } catch (err) {
+      if (err instanceof StorageError) throw err
+      throw new StorageCorruptionError(STORAGE_KEYS.UDHAAR, raw, (err as Error).message)
+    }
+  }
+
+  async saveUdhaarEntries(entries: UdhaarEntry[]): Promise<UdhaarEntry[]> {
+    if (!Array.isArray(entries)) {
+      throw new StorageValidationError('Udhaar entries must be an array')
+    }
+    const seenIds = new Set<string>()
+    const validatedList = entries.map((e) => {
+      const validated = validateUdhaarEntry(e)
+      if (seenIds.has(validated.id)) {
+        throw new StorageValidationError(`Duplicate udhaar id "${validated.id}" detected`)
+      }
+      seenIds.add(validated.id)
+      return validated
+    })
+    const json = JSON.stringify(validatedList)
+    this.writeRaw(STORAGE_KEYS.UDHAAR, json)
+    return validatedList
+  }
+
+  async addUdhaarEntry(entry: UdhaarEntry): Promise<UdhaarEntry> {
+    // Validates positive amounts, valid calendar dates, profileId user ownership, and customerId
+    const validated = validateUdhaarEntry(entry)
+    const existing = await this.getUdhaarEntries()
+
+    if (existing.some((e) => e.id === validated.id)) {
+      throw new StorageValidationError(`Udhaar entry with ID "${validated.id}" already exists`)
+    }
+
+    // Creating Udhaar must NOT create cash income transactions or alter declared cash balance!
+    const updated = [...existing, validated]
+    await this.saveUdhaarEntries(updated)
+    return validated
+  }
+
+  async updateUdhaarEntry(
+    id: string,
+    updates: Partial<Omit<UdhaarEntry, 'id' | 'profileId'>>
+  ): Promise<UdhaarEntry> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid udhaar ID is required for update')
+    }
+
+    const existing = await this.getUdhaarEntries()
+    const index = existing.findIndex((e) => e.id === id)
+    if (index === -1) {
+      throw new StorageNotFoundError('UdhaarEntry', id)
+    }
+
+    const target = existing[index]
+    const merged = {
+      ...target,
+      ...updates,
+      id,
+      profileId: target.profileId, // User ownership cannot be overwritten
+    }
+
+    const validated = validateUdhaarEntry(merged)
+    existing[index] = validated
+    await this.saveUdhaarEntries(existing)
+    return validated
+  }
+
+  async settleUdhaarEntry(id: string, settledAt?: LocalDate): Promise<UdhaarEntry> {
+    return this.updateUdhaarEntry(id, {
+      isSettled: true,
+      settledAt: settledAt || getTodayLocalDate(),
+    })
+  }
+
+  async deleteUdhaarEntry(id: string): Promise<boolean> {
+    if (typeof id !== 'string' || id.trim() === '') {
+      throw new StorageValidationError('Valid udhaar ID is required for deletion')
+    }
+
+    const existing = await this.getUdhaarEntries()
+    const filtered = existing.filter((e) => e.id !== id)
+    if (filtered.length === existing.length) {
+      return false
+    }
+
+    await this.saveUdhaarEntries(filtered)
+    return true
+  }
+
+  // --- Repayments (Member 2 Module) ---
+
+  async getRepayments(udhaarId?: string): Promise<RepaymentRecord[]> {
+    const raw = this.readRaw(STORAGE_KEYS.REPAYMENTS)
+    if (raw === null) return []
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        throw new StorageCorruptionError(STORAGE_KEYS.REPAYMENTS, raw, 'Expected array of repayments')
+      }
+      const validated = parsed.map((item) => validateRepaymentRecord(item))
+      if (udhaarId) {
+        return validated.filter((r) => r.udhaarId === udhaarId)
+      }
+      return validated
+    } catch (err) {
+      if (err instanceof StorageError) throw err
+      throw new StorageCorruptionError(STORAGE_KEYS.REPAYMENTS, raw, (err as Error).message)
+    }
+  }
+
+  async saveRepayments(repayments: RepaymentRecord[]): Promise<RepaymentRecord[]> {
+    if (!Array.isArray(repayments)) {
+      throw new StorageValidationError('Repayments must be an array')
+    }
+    const seenIds = new Set<string>()
+    const validatedList = repayments.map((r) => {
+      const validated = validateRepaymentRecord(r)
+      if (seenIds.has(validated.id)) {
+        throw new StorageValidationError(`Duplicate repayment id "${validated.id}" detected`)
+      }
+      seenIds.add(validated.id)
+      return validated
+    })
+    const json = JSON.stringify(validatedList)
+    this.writeRaw(STORAGE_KEYS.REPAYMENTS, json)
+    return validatedList
+  }
+
+  async recordRepayment(params: RecordRepaymentParams): Promise<RecordRepaymentResult> {
+    if (typeof params !== 'object' || params === null) {
+      throw new StorageValidationError('Repayment parameters must be an object')
+    }
+    if (typeof params.profileId !== 'string' || params.profileId.trim() === '') {
+      throw new StorageValidationError('Valid profileId (user ownership) is required')
+    }
+    if (typeof params.udhaarId !== 'string' || params.udhaarId.trim() === '') {
+      throw new StorageValidationError('Valid udhaarId is required')
+    }
+
+    // Reject non-positive, zero, negative or fractional repayments
+    if (!isSafePaise(params.amountPaise, false) || params.amountPaise <= 0) {
+      throw new StorageValidationError('Repayment amount must be a positive safe integer in paise', 'amountPaise')
+    }
+
+    // Duplicate request protection (coordinating idempotency with Member 1)
+    if (params.requestId && typeof params.requestId === 'string') {
+      const processedRaw = this.readRaw(STORAGE_KEYS.PROCESSED_REQUESTS)
+      const processed: string[] = processedRaw ? JSON.parse(processedRaw) : []
+      if (processed.includes(params.requestId)) {
+        throw new StorageValidationError(`Duplicate repayment request detected for token: ${params.requestId}`)
+      }
+    }
+
+    // Retrieve target credit entry
+    const allUdhaars = await this.getUdhaarEntries()
+    const entryIndex = allUdhaars.findIndex((e) => e.id === params.udhaarId)
+    if (entryIndex === -1) {
+      throw new StorageNotFoundError('UdhaarEntry', params.udhaarId)
+    }
+    const targetEntry = allUdhaars[entryIndex]
+
+    // Backend user ownership enforcement
+    if (targetEntry.profileId !== params.profileId) {
+      throw new StorageValidationError(
+        `User ownership mismatch: unauthorized access to udhaar entry "${params.udhaarId}"`,
+        'profileId'
+      )
+    }
+
+    // Check outstanding balance & reject excessive repayment (overpayment)
+    const currentRemaining = getUdhaarRemainingPaise(targetEntry)
+    if (currentRemaining <= 0) {
+      throw new StorageValidationError('Udhaar entry is already fully settled')
+    }
+    if (params.amountPaise > currentRemaining) {
+      throw new StorageValidationError(
+        `Repayment amount (${params.amountPaise} paise) exceeds remaining outstanding balance (${currentRemaining} paise)`
+      )
+    }
+
+    const repaymentDate =
+      params.date && isValidLocalDate(params.date) ? params.date : getTodayLocalDate()
+    const repaymentId =
+      params.id || `rep-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`
+    const transactionId = `tx-rep-${repaymentId}`
+
+    // 1. Create linked cash-received TransactionRecord (shared transaction ledger)
+    const newTransaction: TransactionRecord = {
+      id: transactionId,
+      profileId: params.profileId,
+      type: 'income',
+      amountPaise: params.amountPaise,
+      date: repaymentDate,
+      category: 'other income',
+      paymentMode: params.paymentMode || 'cash',
+      description: `Repayment received for Udhaar #${targetEntry.id}: ${targetEntry.description}`,
+      repaymentId,
+      udhaarId: targetEntry.id,
+    }
+    const validatedTx = validateTransaction(newTransaction)
+
+    // 2. Create RepaymentRecord
+    const newRepayment: RepaymentRecord = {
+      id: repaymentId,
+      profileId: params.profileId,
+      udhaarId: targetEntry.id,
+      customerId: targetEntry.customerId,
+      amountPaise: params.amountPaise,
+      date: repaymentDate,
+      paymentMode: params.paymentMode || 'cash',
+      transactionId,
+      note: params.note,
+      createdAt: getTodayLocalDate(),
+    }
+    const validatedRepayment = validateRepaymentRecord(newRepayment)
+
+    // 3. Update UdhaarEntry with reduced outstanding amount
+    const newRepaidAmount = (targetEntry.repaidAmountPaise || 0) + params.amountPaise
+    const isNowSettled = newRepaidAmount >= targetEntry.originalAmountPaise
+    const updatedEntry: UdhaarEntry = {
+      ...targetEntry,
+      repaidAmountPaise: newRepaidAmount,
+      isSettled: isNowSettled,
+      settledAt: isNowSettled ? repaymentDate : targetEntry.settledAt,
+    }
+    const validatedUdhaar = validateUdhaarEntry(updatedEntry)
+
+    // Atomic write coordination: backup current raw values for rollback if write fails
+    const rawUdhaarBefore = this.readRaw(STORAGE_KEYS.UDHAAR)
+    const rawRepaymentsBefore = this.readRaw(STORAGE_KEYS.REPAYMENTS)
+    const rawTransactionsBefore = this.readRaw(STORAGE_KEYS.TRANSACTIONS)
+    const rawProcessedBefore = this.readRaw(STORAGE_KEYS.PROCESSED_REQUESTS)
+
+    try {
+      allUdhaars[entryIndex] = validatedUdhaar
+      const allRepayments = await this.getRepayments()
+      const updatedRepayments = [...allRepayments, validatedRepayment]
+      const allTransactions = await this.getTransactions()
+      const updatedTransactions = [...allTransactions, validatedTx]
+
+      // Save atomically to storage
+      await this.saveUdhaarEntries(allUdhaars)
+      await this.saveRepayments(updatedRepayments)
+      await this.saveTransactions(updatedTransactions)
+
+      if (params.requestId) {
+        const processedList: string[] = rawProcessedBefore ? JSON.parse(rawProcessedBefore) : []
+        processedList.push(params.requestId)
+        this.writeRaw(STORAGE_KEYS.PROCESSED_REQUESTS, JSON.stringify(processedList))
+      }
+
+      return {
+        repayment: validatedRepayment,
+        updatedEntry: validatedUdhaar,
+        transaction: validatedTx,
+      }
+    } catch (err) {
+      // Rollback all affected raw keys to guarantee no partial write or false success
+      if (rawUdhaarBefore !== null) this.writeRaw(STORAGE_KEYS.UDHAAR, rawUdhaarBefore)
+      else this.removeRaw(STORAGE_KEYS.UDHAAR)
+
+      if (rawRepaymentsBefore !== null) this.writeRaw(STORAGE_KEYS.REPAYMENTS, rawRepaymentsBefore)
+      else this.removeRaw(STORAGE_KEYS.REPAYMENTS)
+
+      if (rawTransactionsBefore !== null) this.writeRaw(STORAGE_KEYS.TRANSACTIONS, rawTransactionsBefore)
+      else this.removeRaw(STORAGE_KEYS.TRANSACTIONS)
+
+      if (rawProcessedBefore !== null) this.writeRaw(STORAGE_KEYS.PROCESSED_REQUESTS, rawProcessedBefore)
+      else this.removeRaw(STORAGE_KEYS.PROCESSED_REQUESTS)
+
+      throw err
+    }
+  }
+
+  // --- Day Log Operations ---
+
+  async getDayLogs(): Promise<DayLog[]> {
+    const raw = this.readRaw(STORAGE_KEYS.DAY_LOGS)
+    if (raw === null || raw.trim() === '') {
+      return []
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      throw new StorageCorruptionError(STORAGE_KEYS.DAY_LOGS, raw, 'Invalid JSON syntax')
+    }
+
+    if (!Array.isArray(parsed)) {
+      throw new StorageValidationError(`Stored day logs must be an array, received ${typeof parsed}`)
+    }
+
+    const seenDates = new Set<string>()
+    const validatedList: DayLog[] = []
+
+    for (const item of parsed) {
+      const validated = validateDayLog(item)
+      if (seenDates.has(validated.date)) {
+        throw new StorageValidationError(`Duplicate DayLog date detected: "${validated.date}"`)
+      }
+      seenDates.add(validated.date)
+      validatedList.push(validated)
+    }
+
+    return validatedList.sort((a, b) => b.date.localeCompare(a.date))
+  }
+
+  async saveDayLogs(dayLogs: DayLog[]): Promise<DayLog[]> {
+    if (!Array.isArray(dayLogs)) {
+      throw new StorageValidationError('dayLogs must be an array')
+    }
+
+    const seenDates = new Set<string>()
+    const validatedList: DayLog[] = []
+
+    for (const item of dayLogs) {
+      const validated = validateDayLog(item)
+      if (seenDates.has(validated.date)) {
+        throw new StorageValidationError(`Duplicate DayLog date detected: "${validated.date}"`)
+      }
+      seenDates.add(validated.date)
+      validatedList.push(validated)
+    }
+
+    const sorted = validatedList.sort((a, b) => b.date.localeCompare(a.date))
+    const json = JSON.stringify(sorted)
+    this.writeRaw(STORAGE_KEYS.DAY_LOGS, json)
+    return sorted
+  }
+
+  async upsertDayLog(dayLog: DayLog): Promise<DayLog> {
+    const validated = validateDayLog(dayLog)
+    const existing = await this.getDayLogs()
+    const index = existing.findIndex((d) => d.date === validated.date)
+
+    let updated: DayLog[]
+    if (index >= 0) {
+      updated = [...existing]
+      updated[index] = validated
+    } else {
+      updated = [validated, ...existing]
+    }
+
+    await this.saveDayLogs(updated)
+    return validated
+  }
+
+  async deleteDayLog(date: LocalDate): Promise<boolean> {
+    if (typeof date !== 'string' || !isValidLocalDate(date)) {
+      throw new StorageValidationError('Valid calendar date is required for deletion')
+    }
+
+    const existing = await this.getDayLogs()
+    const filtered = existing.filter((d) => d.date !== date)
+    if (filtered.length === existing.length) {
+      return false
+    }
+
+    await this.saveDayLogs(filtered)
+    return true
+  }
+
   // --- Reset / Clear ---
 
   async clearAll(): Promise<void> {
+    this.removeRaw(STORAGE_KEYS.DAY_LOGS)
     this.removeRaw(STORAGE_KEYS.PROFILE)
     this.removeRaw(STORAGE_KEYS.SHIFTS)
     this.removeRaw(STORAGE_KEYS.EXPENSES)
     this.removeRaw(STORAGE_KEYS.TRANSACTIONS)
+    this.removeRaw(STORAGE_KEYS.CUSTOMERS)
+    this.removeRaw(STORAGE_KEYS.UDHAAR)
+    this.removeRaw(STORAGE_KEYS.REPAYMENTS)
+    this.removeRaw(STORAGE_KEYS.PROCESSED_REQUESTS)
   }
 }
 
@@ -867,6 +1740,26 @@ export const storageService = {
   addTransaction: (t: TransactionRecord) => activeService.addTransaction(t),
   updateTransaction: (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u),
   deleteTransaction: (id: string) => activeService.deleteTransaction(id),
+  getCustomers: () => activeService.getCustomers(),
+  saveCustomers: (c: Customer[]) => activeService.saveCustomers(c),
+  addCustomer: (c: Customer) => activeService.addCustomer(c),
+  updateCustomer: (id: string, u: Partial<Omit<Customer, 'id'>>) => activeService.updateCustomer(id, u),
+  archiveCustomer: (id: string) => activeService.archiveCustomer(id),
+  unarchiveCustomer: (id: string) => activeService.unarchiveCustomer(id),
+  deleteCustomer: (id: string) => activeService.deleteCustomer(id),
+  getUdhaarEntries: (customerId?: string) => activeService.getUdhaarEntries(customerId),
+  saveUdhaarEntries: (e: UdhaarEntry[]) => activeService.saveUdhaarEntries(e),
+  addUdhaarEntry: (e: UdhaarEntry) => activeService.addUdhaarEntry(e),
+  updateUdhaarEntry: (id: string, u: Partial<Omit<UdhaarEntry, 'id' | 'profileId'>>) => activeService.updateUdhaarEntry(id, u),
+  settleUdhaarEntry: (id: string, settledAt?: LocalDate) => activeService.settleUdhaarEntry(id, settledAt),
+  deleteUdhaarEntry: (id: string) => activeService.deleteUdhaarEntry(id),
+  getRepayments: (udhaarId?: string) => activeService.getRepayments(udhaarId),
+  saveRepayments: (r: RepaymentRecord[]) => activeService.saveRepayments(r),
+  recordRepayment: (p: RecordRepaymentParams) => activeService.recordRepayment(p),
+  getDayLogs: () => activeService.getDayLogs(),
+  saveDayLogs: (d: DayLog[]) => activeService.saveDayLogs(d),
+  upsertDayLog: (d: DayLog) => activeService.upsertDayLog(d),
+  deleteDayLog: (date: LocalDate) => activeService.deleteDayLog(date),
   clearAll: () => activeService.clearAll(),
 }
 
@@ -887,4 +1780,25 @@ export const saveTransactions = (t: TransactionRecord[]) => activeService.saveTr
 export const addTransaction = (t: TransactionRecord) => activeService.addTransaction(t)
 export const updateTransaction = (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) => activeService.updateTransaction(id, u)
 export const deleteTransaction = (id: string) => activeService.deleteTransaction(id)
+export const getCustomers = () => activeService.getCustomers()
+export const saveCustomers = (c: Customer[]) => activeService.saveCustomers(c)
+export const addCustomer = (c: Customer) => activeService.addCustomer(c)
+export const updateCustomer = (id: string, u: Partial<Omit<Customer, 'id'>>) => activeService.updateCustomer(id, u)
+export const archiveCustomer = (id: string) => activeService.archiveCustomer(id)
+export const unarchiveCustomer = (id: string) => activeService.unarchiveCustomer(id)
+export const deleteCustomer = (id: string) => activeService.deleteCustomer(id)
+export const getUdhaarEntries = (customerId?: string) => activeService.getUdhaarEntries(customerId)
+export const saveUdhaarEntries = (e: UdhaarEntry[]) => activeService.saveUdhaarEntries(e)
+export const addUdhaarEntry = (e: UdhaarEntry) => activeService.addUdhaarEntry(e)
+export const updateUdhaarEntry = (id: string, u: Partial<Omit<UdhaarEntry, 'id' | 'profileId'>>) => activeService.updateUdhaarEntry(id, u)
+export const settleUdhaarEntry = (id: string, settledAt?: LocalDate) => activeService.settleUdhaarEntry(id, settledAt)
+export const deleteUdhaarEntry = (id: string) => activeService.deleteUdhaarEntry(id)
+export const getRepayments = (udhaarId?: string) => activeService.getRepayments(udhaarId)
+export const saveRepayments = (r: RepaymentRecord[]) => activeService.saveRepayments(r)
+export const recordRepayment = (p: RecordRepaymentParams) => activeService.recordRepayment(p)
+export const getDayLogs = () => activeService.getDayLogs()
+export const saveDayLogs = (d: DayLog[]) => activeService.saveDayLogs(d)
+export const upsertDayLog = (d: DayLog) => activeService.upsertDayLog(d)
+export const deleteDayLog = (date: LocalDate) => activeService.deleteDayLog(date)
 export const clearAllData = () => activeService.clearAll()
+export type { PaymentMode } from '../types'

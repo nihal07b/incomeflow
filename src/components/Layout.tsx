@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+﻿import type { ReactNode } from 'react'
 import type { NavTabId } from './navigation'
 import { Navbar } from './Navbar'
 import { BottomNav } from './BottomNav'

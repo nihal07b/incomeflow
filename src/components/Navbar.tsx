@@ -1,4 +1,4 @@
-import type { NavTabId } from './navigation'
+﻿import type { NavTabId } from './navigation'
 import { NAV_TABS } from './navigation'
 import { OverviewIcon, ShiftsIcon, IncomeExpensesIcon, BillsVaultsIcon, UdhaarIcon } from './Icons'
 

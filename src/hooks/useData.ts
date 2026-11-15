@@ -1,7 +1,7 @@
 import { useContext, useSyncExternalStore } from 'react'
 import { StoreContext } from '../context/StoreContext'
 import type { DataContextValue } from '../context/DataContext'
-import type { Profile, ShiftLog } from '../types'
+import type { Profile, ShiftLog, DayLog, LocalDate } from '../types'
 import type { TransactionRecord } from '../services/storage'
 import type { ShiftSummary } from '../utils/shifts'
 import type { TransactionSummary } from '../utils/transactions'
@@ -24,6 +24,8 @@ export function useData(): DataContextValue {
     updateTransaction: (id: string, u: Partial<Omit<TransactionRecord, 'id'>>) =>
       store.updateTransaction(id, u),
     deleteTransaction: (id: string) => store.deleteTransaction(id),
+    upsertDayLog: (log: DayLog) => store.upsertDayLog(log),
+    deleteDayLog: (date: LocalDate) => store.deleteDayLog(date),
     refreshData: () => store.refresh(),
   }
 }
@@ -98,5 +100,23 @@ export function useTransactions(): {
     updateTransaction: data.updateTransaction,
     deleteTransaction: data.deleteTransaction,
     refreshTransactions: data.refreshData,
+  }
+}
+
+/** Reactive daily work status records for analytics and the work log UI. */
+export function useDayLogs(): {
+  dayLogs: DayLog[]
+  loading: boolean
+  error: string | null
+  upsertDayLog: (log: DayLog) => Promise<DayLog>
+  deleteDayLog: (date: LocalDate) => Promise<boolean>
+} {
+  const data = useData()
+  return {
+    dayLogs: data.dayLogs,
+    loading: data.loading,
+    error: data.error,
+    upsertDayLog: data.upsertDayLog,
+    deleteDayLog: data.deleteDayLog,
   }
 }

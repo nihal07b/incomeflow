@@ -1,25 +1,120 @@
-/** Draft shared contract. Money = integer paise. Dates = local YYYY-MM-DD. */
+/** Shared contract. Money = integer paise. Dates = local YYYY-MM-DD. */
+
 export type MoneyPaise = number
 export type LocalDate = string
 export type TimeSlot = 'morning' | 'afternoon' | 'evening' | 'night'
-export interface Profile { id: string; displayName: string; language: 'en' | 'hi'; currentCashPaise: MoneyPaise; cashAsOfDate: LocalDate; essentialDailySpendPaise: MoneyPaise; minimumCushionPaise: MoneyPaise }
-export interface Bill { id: string; profileId: string; label: string; amountPaise: MoneyPaise; dueDate: LocalDate }
-export interface ShiftLog { id: string; profileId: string; date: LocalDate; slot: TimeSlot; hours: number; grossEarningsPaise: MoneyPaise; workCostsPaise: MoneyPaise }
-export interface PlannedExpense { id: string; profileId: string; date: LocalDate; label: string; amountPaise: MoneyPaise }
-export interface WorkAvailability { date: LocalDate; availableSlots: TimeSlot[]; maxHours: number }
-export interface ForecastAssumptions { source: 'user-assumption' | 'historical-baseline'; typicalNetHourlyPaise: MoneyPaise; conservativeNetHourlyPaise: MoneyPaise; comparableShiftCount: number }
+
+export interface Profile {
+  id: string
+  displayName: string
+  language: 'en' | 'hi'
+  currentCashPaise: MoneyPaise
+  cashAsOfDate: LocalDate
+  essentialDailySpendPaise: MoneyPaise
+  minimumCushionPaise: MoneyPaise
+}
+
+export interface Bill {
+  id: string
+  profileId: string
+  label: string
+  amountPaise: MoneyPaise
+  dueDate: LocalDate
+}
+
+export interface ShiftLog {
+  id: string
+  profileId: string
+  date: LocalDate
+  slot: TimeSlot
+  hours: number
+  grossEarningsPaise: MoneyPaise
+  workCostsPaise: MoneyPaise
+}
+
+export interface PlannedExpense {
+  id: string
+  profileId: string
+  date: LocalDate
+  label: string
+  amountPaise: MoneyPaise
+}
+
+export interface WorkAvailability {
+  date: LocalDate
+  availableSlots: TimeSlot[]
+  maxHours: number
+}
+
+export interface Customer {
+  id: string
+  profileId?: string
+  name: string
+  contact: string
+  note?: string
+  createdAt: LocalDate
+  isArchived?: boolean
+  archivedAt?: LocalDate
+}
+
+export type UdhaarStatus = 'pending' | 'due-today' | 'overdue' | 'settled'
+
+export type PaymentMode = 'cash' | 'digital'
+
+export interface UdhaarEntry {
+  id: string
+  profileId: string
+  customerId: string
+  originalAmountPaise: MoneyPaise
+  repaidAmountPaise?: MoneyPaise
+  description: string
+  entryDate: LocalDate
+  dueDate: LocalDate
+  isSettled?: boolean
+  settledAt?: LocalDate
+  createdAt?: string
+}
+
+export interface RepaymentRecord {
+  id: string
+  profileId: string
+  udhaarId: string
+  customerId: string
+  amountPaise: MoneyPaise
+  date: LocalDate
+  paymentMode: PaymentMode
+  transactionId: string
+  note?: string
+  createdAt?: string
+}
+
+export interface ForecastAssumptions {
+  source: 'user-assumption' | 'historical-baseline'
+  typicalNetHourlyPaise: MoneyPaise
+  conservativeNetHourlyPaise: MoneyPaise
+  comparableShiftCount: number
+}
+
 export interface PlanResult {
   currentCashPaise: MoneyPaise
-  projectedCashByDay: { date: LocalDate; closingCashPaise: MoneyPaise }[]
+  projectedCashByDay: {
+    date: LocalDate
+    closingCashPaise: MoneyPaise
+  }[]
   estimatedBillGapPaise: MoneyPaise
   minimumCashWarning: boolean
-  suggestedShifts: { date: LocalDate; slot: TimeSlot; hours: number; estimatedNetPaise: MoneyPaise }[]
+  suggestedShifts: {
+    date: LocalDate
+    slot: TimeSlot
+    hours: number
+    estimatedNetPaise: MoneyPaise
+  }[]
   dataQuality: 'insufficient' | 'assumed' | 'historical'
   assumptions: string[]
   explanation: string
 }
 
-/** Bill or EMI goal */
+/** Bill or EMI goal. */
 export interface BillGoal {
   id: string
   profileId: string
@@ -30,7 +125,7 @@ export interface BillGoal {
   createdAt: LocalDate
 }
 
-/** Single allocation record towards a goal (e.g. opening, manual, peak-day, withdrawal) */
+/** Single allocation record towards a goal. */
 export interface GoalAllocation {
   id: string
   goalId: string
@@ -51,7 +146,7 @@ export interface AddContributionInput {
   type?: 'manual' | 'peak_day'
 }
 
-/** Baseline output contract from Member 4 / analytics engine */
+/** Baseline output contract from the analytics engine. */
 export interface BaselineOutput {
   available: boolean
   baselineDailyIncomePaise?: MoneyPaise
@@ -59,7 +154,7 @@ export interface BaselineOutput {
   shiftsAnalyzed?: number
 }
 
-/** Calculated peak-day surplus savings suggestion */
+/** Calculated peak-day surplus savings suggestion. */
 export interface PeakDaySuggestion {
   id: string
   date: LocalDate
@@ -82,8 +177,11 @@ export interface WithdrawalInput {
   idempotencyKey?: string
 }
 
-/** Calculated display state of a BillGoal */
-export type BillStatus = 'active' | 'due-today' | 'overdue' | 'fully-funded'
+export type BillStatus =
+  | 'active'
+  | 'due-today'
+  | 'overdue'
+  | 'fully-funded'
 
 export interface BillGoalProgress {
   goal: BillGoal
@@ -98,7 +196,6 @@ export interface BillGoalProgress {
   isDueToday: boolean
 }
 
-/** Supported Vault categories */
 export type VaultCategory =
   | 'emergency'
   | 'festival'
@@ -106,7 +203,6 @@ export type VaultCategory =
   | 'future_investment'
   | 'custom'
 
-/** Savings vault that a user can allocate money to */
 export interface SavingsVault {
   id: string
   profileId: string
@@ -132,4 +228,96 @@ export interface CreateVaultInput {
   category: VaultCategory
   targetPaise: MoneyPaise
   openingContributionPaise?: MoneyPaise
+}
+
+/** Financial summary contract. */
+export type TransactionType = 'income' | 'expense'
+
+export interface Transaction {
+  id: string
+  profileId?: string
+  date: LocalDate
+  amountPaise: MoneyPaise
+  type: TransactionType
+  category: string
+  description?: string
+  shiftId?: string | null
+  workSessionId?: string | null
+  repaymentId?: string | null
+}
+
+export interface Repayment {
+  id: string
+  profileId?: string
+  date: LocalDate
+  amountPaise: MoneyPaise
+  type: 'received' | 'paid'
+  category?: string
+  description?: string
+  transactionId?: string | null
+}
+
+export interface DailySeriesItem {
+  date: LocalDate
+  incomePaise: MoneyPaise
+  expensesPaise: MoneyPaise
+  netPaise: MoneyPaise
+}
+
+export interface FinancialSummary {
+  periodIncomePaise: MoneyPaise
+  periodExpensesPaise: MoneyPaise
+  netRecordedCashFlowPaise: MoneyPaise
+  dailySeries: DailySeriesItem[]
+  expenseCategoryTotals: Record<string, MoneyPaise>
+}
+
+export interface FinancialSummaryInput {
+  startDate?: LocalDate
+  endDate?: LocalDate
+  transactions?: Transaction[]
+}
+
+/** Daily work status. A missing DayLog means unknown. */
+export type DayStatus = 'complete' | 'no_work' | 'incomplete'
+
+export interface DayLog {
+  date: LocalDate
+  status: DayStatus
+}
+
+/** Reminder preferences and display records. */
+export interface ReminderPreferences {
+  profileId: string
+  dailyLoggingEnabled: boolean
+  dailyLoggingPrimaryTime: string
+  dailyLoggingSecondaryEnabled: boolean
+  dailyLoggingSecondaryTime?: string
+  udhaarDueEnabled: boolean
+  billsDueEnabled: boolean
+  advanceNoticeDays: number
+  updatedAt?: string
+}
+
+export type ReminderType =
+  | 'daily-logging'
+  | 'udhaar-due'
+  | 'bill-due'
+
+export type ReminderUrgency = 'urgent' | 'warning' | 'info'
+
+export interface InAppReminder {
+  id: string
+  type: ReminderType
+  urgency: ReminderUrgency
+  title: string
+  message: string
+  scheduledTime?: string
+  dueDate?: LocalDate
+  amountPaise?: MoneyPaise
+  statusLabel?: string
+  entityId?: string
+  targetTab?: string
+  dismissed?: boolean
+  createdAt: string
 }

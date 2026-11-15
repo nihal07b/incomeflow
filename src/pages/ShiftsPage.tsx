@@ -1,3 +1,5 @@
+import { DayStatusLogger } from '../components/DayStatusLogger'
+import { useProfile } from '../hooks/useData'
 import { useState, useEffect, useId } from 'react'
 import type { ShiftLog, TimeSlot, LocalDate } from '../types'
 import { getTodayLocalDate } from '../services/storage'
@@ -21,6 +23,7 @@ function generateId(): string {
 }
 
 export function ShiftsPage() {
+  const { profile } = useProfile()
   const {
     shifts,
     shiftSummary: summary,
@@ -127,7 +130,7 @@ export function ShiftsPage() {
       } else {
         const newShift: ShiftLog = {
           id: generateId(),
-          profileId: 'rider-default',
+          profileId: profile?.id ?? 'profile-demo-1',
           date,
           slot,
           hours: numHours,
@@ -183,6 +186,7 @@ export function ShiftsPage() {
 
   return (
     <div className="space-y-8">
+      <DayStatusLogger />
       {/* Page Header */}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
@@ -266,17 +270,15 @@ export function ShiftsPage() {
         </div>
 
         <div
-          className={`rounded-2xl border p-5 shadow-sm ${
-            summary.totalNetPaise < 0
-              ? 'border-rose-200 bg-rose-50/50'
-              : 'border-teal-200 bg-teal-50/50'
-          }`}
+          className={`rounded-2xl border p-5 shadow-sm ${summary.totalNetPaise < 0
+            ? 'border-rose-200 bg-rose-50/50'
+            : 'border-teal-200 bg-teal-50/50'
+            }`}
         >
           <p className="text-xs font-medium text-slate-600">Net Take-Home</p>
           <p
-            className={`mt-2 text-2xl font-bold sm:text-3xl ${
-              summary.totalNetPaise < 0 ? 'text-rose-700' : 'text-teal-800'
-            }`}
+            className={`mt-2 text-2xl font-bold sm:text-3xl ${summary.totalNetPaise < 0 ? 'text-rose-700' : 'text-teal-800'
+              }`}
           >
             {formatRupees(summary.totalNetPaise)}
           </p>
@@ -290,9 +292,8 @@ export function ShiftsPage() {
 
       {/* Shift Form Section */}
       <section
-        className={`rounded-2xl border bg-white p-6 shadow-sm sm:p-8 transition-colors ${
-          editingShiftId ? 'border-teal-400 ring-2 ring-teal-100' : 'border-slate-200'
-        }`}
+        className={`rounded-2xl border bg-white p-6 shadow-sm sm:p-8 transition-colors ${editingShiftId ? 'border-teal-400 ring-2 ring-teal-100' : 'border-slate-200'
+          }`}
       >
         <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
           <div>
@@ -336,9 +337,8 @@ export function ShiftsPage() {
                 value={date}
                 max={getTodayLocalDate()}
                 onChange={(e) => setDate(e.target.value)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.date ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.date ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                  }`}
               />
               {formErrors.date && (
                 <p className="mt-1 text-xs text-rose-600">{formErrors.date}</p>
@@ -357,9 +357,8 @@ export function ShiftsPage() {
                 id={slotFieldId}
                 value={slot}
                 onChange={(e) => setSlot(e.target.value as TimeSlot)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.slot ? 'border-rose-400' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.slot ? 'border-rose-400' : 'border-slate-300'
+                  }`}
               >
                 <option value="morning">Morning (6am – 12pm)</option>
                 <option value="afternoon">Afternoon (12pm – 5pm)</option>
@@ -388,9 +387,8 @@ export function ShiftsPage() {
                 placeholder="e.g. 4.5"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.hours ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.hours ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                  }`}
               />
               {formErrors.hours && (
                 <p className="mt-1 text-xs text-rose-600">{formErrors.hours}</p>
@@ -417,9 +415,8 @@ export function ShiftsPage() {
                   placeholder="850"
                   value={grossRupees}
                   onChange={(e) => setGrossRupees(e.target.value)}
-                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                    formErrors.grossRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                  }`}
+                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.grossRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                    }`}
                 />
               </div>
               {formErrors.grossRupees && (
@@ -447,9 +444,8 @@ export function ShiftsPage() {
                   placeholder="200"
                   value={workCostsRupees}
                   onChange={(e) => setWorkCostsRupees(e.target.value)}
-                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                    formErrors.workCostsRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                  }`}
+                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.workCostsRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                    }`}
                 />
               </div>
               {formErrors.workCostsRupees && (
@@ -460,11 +456,10 @@ export function ShiftsPage() {
             {/* Live Calculation Preview Card */}
             <div className="flex flex-col justify-end">
               <div
-                className={`rounded-xl border p-3 ${
-                  previewNetPaise < 0
-                    ? 'border-rose-200 bg-rose-50/60 text-rose-950'
-                    : 'border-teal-200 bg-teal-50/60 text-teal-950'
-                }`}
+                className={`rounded-xl border p-3 ${previewNetPaise < 0
+                  ? 'border-rose-200 bg-rose-50/60 text-rose-950'
+                  : 'border-teal-200 bg-teal-50/60 text-teal-950'
+                  }`}
               >
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium">Calculated Net:</span>
@@ -497,8 +492,8 @@ export function ShiftsPage() {
               {isSubmitting
                 ? 'Saving...'
                 : editingShiftId
-                ? 'Update Work Session'
-                : 'Save Work Session'}
+                  ? 'Update Work Session'
+                  : 'Save Work Session'}
             </button>
             {editingShiftId && (
               <button
@@ -627,9 +622,8 @@ export function ShiftsPage() {
                   <div className="flex items-center justify-between gap-4 sm:justify-end">
                     <div className="text-right">
                       <p
-                        className={`text-lg font-bold ${
-                          isNegative ? 'text-rose-700' : 'text-teal-700'
-                        }`}
+                        className={`text-lg font-bold ${isNegative ? 'text-rose-700' : 'text-teal-700'
+                          }`}
                       >
                         {formatRupees(netPaise)}
                       </p>

@@ -59,6 +59,8 @@ export interface TransactionSummary {
  */
 export function getCategoryLabel(category: TransactionCategory): string {
   switch (category) {
+    case 'repayment':
+      return 'Repayment'
     case 'delivery earnings':
       return '🛵 Delivery Earnings'
     case 'other income':

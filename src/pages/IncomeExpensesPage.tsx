@@ -1,3 +1,4 @@
+import { useProfile } from '../hooks/useData'
 import { useState, useEffect, useId } from 'react'
 import {
   getTodayLocalDate,
@@ -28,6 +29,8 @@ function generateId(): string {
 }
 
 export function IncomeExpensesPage() {
+  const { profile } = useProfile()
+
   const {
     transactions,
     transactionSummary: summary,
@@ -157,7 +160,7 @@ export function IncomeExpensesPage() {
       } else {
         const newTx: TransactionRecord = {
           id: generateId(),
-          profileId: 'rider-default',
+          profileId: profile?.id ?? 'profile-demo-1',
           type,
           amountPaise,
           date,
@@ -319,28 +322,25 @@ export function IncomeExpensesPage() {
         </div>
 
         <div
-          className={`rounded-2xl border p-5 shadow-sm ${
-            summary.netCashFlowPaise < 0
+          className={`rounded-2xl border p-5 shadow-sm ${summary.netCashFlowPaise < 0
               ? 'border-rose-200 bg-rose-50/50'
               : 'border-teal-200 bg-teal-50/50'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <p className="text-xs font-medium text-slate-600">Net Cash Flow</p>
             <span
-              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
-                summary.netCashFlowPaise < 0
+              className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${summary.netCashFlowPaise < 0
                   ? 'bg-rose-100 text-rose-800'
                   : 'bg-teal-100 text-teal-800'
-              }`}
+                }`}
             >
               {summary.netCashFlowPaise < 0 ? 'Deficit' : 'Surplus'}
             </span>
           </div>
           <p
-            className={`mt-2 text-2xl font-bold sm:text-3xl ${
-              summary.netCashFlowPaise < 0 ? 'text-rose-700' : 'text-teal-800'
-            }`}
+            className={`mt-2 text-2xl font-bold sm:text-3xl ${summary.netCashFlowPaise < 0 ? 'text-rose-700' : 'text-teal-800'
+              }`}
           >
             {formatRupees(summary.netCashFlowPaise)}
           </p>
@@ -370,9 +370,8 @@ export function IncomeExpensesPage() {
 
       {/* Transaction Entry Form */}
       <section
-        className={`rounded-2xl border bg-white p-6 shadow-sm sm:p-8 transition-colors ${
-          editingTxId ? 'border-teal-400 ring-2 ring-teal-100' : 'border-slate-200'
-        }`}
+        className={`rounded-2xl border bg-white p-6 shadow-sm sm:p-8 transition-colors ${editingTxId ? 'border-teal-400 ring-2 ring-teal-100' : 'border-slate-200'
+          }`}
       >
         <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
           <div>
@@ -410,22 +409,20 @@ export function IncomeExpensesPage() {
               <button
                 type="button"
                 onClick={() => handleTypeChange('income')}
-                className={`flex-1 rounded-xl py-2.5 px-4 text-sm font-semibold transition-all ${
-                  type === 'income'
+                className={`flex-1 rounded-xl py-2.5 px-4 text-sm font-semibold transition-all ${type === 'income'
                     ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-600/20'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
+                  }`}
               >
                 + Income (Money In)
               </button>
               <button
                 type="button"
                 onClick={() => handleTypeChange('expense')}
-                className={`flex-1 rounded-xl py-2.5 px-4 text-sm font-semibold transition-all ${
-                  type === 'expense'
+                className={`flex-1 rounded-xl py-2.5 px-4 text-sm font-semibold transition-all ${type === 'expense'
                     ? 'bg-amber-700 text-white shadow-sm ring-2 ring-amber-600/20'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
+                  }`}
               >
                 - Expense (Money Out)
               </button>
@@ -453,9 +450,8 @@ export function IncomeExpensesPage() {
                   placeholder="250"
                   value={amountRupees}
                   onChange={(e) => setAmountRupees(e.target.value)}
-                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                    formErrors.amountRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                  }`}
+                  className={`block w-full rounded-xl border bg-white pl-8 pr-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.amountRupees ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                    }`}
                 />
               </div>
               {formErrors.amountRupees && (
@@ -477,9 +473,8 @@ export function IncomeExpensesPage() {
                 value={date}
                 max={getTodayLocalDate()}
                 onChange={(e) => setDate(e.target.value)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.date ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.date ? 'border-rose-400 bg-rose-50/30' : 'border-slate-300'
+                  }`}
               />
               {formErrors.date && (
                 <p className="mt-1 text-xs text-rose-600">{formErrors.date}</p>
@@ -498,9 +493,8 @@ export function IncomeExpensesPage() {
                 id={categoryFieldId}
                 value={category}
                 onChange={(e) => setCategory(e.target.value as TransactionCategory)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.category ? 'border-rose-400' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.category ? 'border-rose-400' : 'border-slate-300'
+                  }`}
               >
                 {type === 'income' ? (
                   TRANSACTION_INCOME_CATEGORIES.map((cat) => (
@@ -533,9 +527,8 @@ export function IncomeExpensesPage() {
                 id={modeFieldId}
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value as PaymentMode)}
-                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${
-                  formErrors.paymentMode ? 'border-rose-400' : 'border-slate-300'
-                }`}
+                className={`mt-1.5 block w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600 ${formErrors.paymentMode ? 'border-rose-400' : 'border-slate-300'
+                  }`}
               >
                 <option value="cash">💵 Cash in Hand</option>
                 <option value="digital">📱 Digital (UPI / Card / NetBanking)</option>
@@ -566,11 +559,10 @@ export function IncomeExpensesPage() {
 
           {/* Real-time Preview Pill */}
           <div
-            className={`rounded-xl border p-3 text-xs flex flex-wrap items-center justify-between gap-2 ${
-              type === 'income'
+            className={`rounded-xl border p-3 text-xs flex flex-wrap items-center justify-between gap-2 ${type === 'income'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
                 : 'border-amber-200 bg-amber-50 text-amber-950'
-            }`}
+              }`}
           >
             <div className="flex items-center gap-2">
               <span className="font-semibold uppercase tracking-wider">Preview:</span>
@@ -588,19 +580,18 @@ export function IncomeExpensesPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm focus-visible:outline-2 disabled:opacity-50 ${
-                type === 'income'
+              className={`rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm focus-visible:outline-2 disabled:opacity-50 ${type === 'income'
                   ? 'bg-emerald-700 hover:bg-emerald-800 focus-visible:outline-emerald-700'
                   : 'bg-amber-700 hover:bg-amber-800 focus-visible:outline-amber-700'
-              }`}
+                }`}
             >
               {isSubmitting
                 ? 'Saving...'
                 : editingTxId
-                ? 'Update Transaction'
-                : type === 'income'
-                ? 'Add Income'
-                : 'Add Expense'}
+                  ? 'Update Transaction'
+                  : type === 'income'
+                    ? 'Add Income'
+                    : 'Add Expense'}
             </button>
             {editingTxId && (
               <button
@@ -840,11 +831,10 @@ export function IncomeExpensesPage() {
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className={`mt-1 flex size-9 shrink-0 items-center justify-center rounded-full ${
-                        isIncome
+                      className={`mt-1 flex size-9 shrink-0 items-center justify-center rounded-full ${isIncome
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-amber-100 text-amber-800'
-                      }`}
+                        }`}
                     >
                       {isIncome ? '↓' : '↑'}
                     </div>
@@ -855,11 +845,10 @@ export function IncomeExpensesPage() {
                           {getCategoryLabel(tx.category)}
                         </strong>
                         <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                            isIncome
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${isIncome
                               ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                               : 'bg-amber-50 text-amber-800 border border-amber-200'
-                          }`}
+                            }`}
                         >
                           {isIncome ? 'Income' : 'Expense'}
                         </span>
@@ -879,9 +868,8 @@ export function IncomeExpensesPage() {
                   <div className="flex items-center justify-between gap-4 sm:justify-end">
                     <div className="text-right">
                       <p
-                        className={`text-lg font-bold ${
-                          isIncome ? 'text-emerald-700' : 'text-amber-700'
-                        }`}
+                        className={`text-lg font-bold ${isIncome ? 'text-emerald-700' : 'text-amber-700'
+                          }`}
                       >
                         {isIncome ? '+' : '-'}
                         {formatRupees(tx.amountPaise)}
