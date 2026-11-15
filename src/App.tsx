@@ -7,6 +7,7 @@ import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
 import { BillsVaultsPage } from './pages/BillsVaultsPage'
 import { UdhaarPage } from './pages/UdhaarPage'
 import { DataProvider } from './context/DataContext'
+import SaathiAssistant from "./components/SaathiAssistant";
 
 function getInitialTab(): NavTabId {
   const hash = window.location.hash.replace('#', '')
@@ -62,6 +63,7 @@ export default function App() {
       <Layout activeTab={activeTab} onSelectTab={handleSelectTab}>
         {renderCurrentPage()}
       </Layout>
+      <SaathiAssistant />
     </DataProvider>
   )
 }
