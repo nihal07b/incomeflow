@@ -26,7 +26,6 @@ const SESSION_KEY = 'incomeflow:demo:session'
 function readSavedUser(): DemoUser | null {
   try {
     const raw = localStorage.getItem(USER_KEY)
-
     if (!raw) return null
 
     const user: unknown = JSON.parse(raw)
@@ -90,7 +89,6 @@ export default function App() {
 
   const handleLogin = (loginEmail: string) => {
     const normalizedEmail = loginEmail.trim().toLowerCase()
-
     setEmail(normalizedEmail)
 
     if (
@@ -113,17 +111,14 @@ export default function App() {
     setSavedUser(user)
     setAuthStep('dashboard')
     setActivePage('overview')
-
     window.location.hash = 'overview'
   }
 
   const handleLogout = () => {
     localStorage.removeItem(SESSION_KEY)
-
     setAuthStep('login')
     setEmail('')
     setActivePage('overview')
-
     window.location.hash = 'overview'
   }
 
