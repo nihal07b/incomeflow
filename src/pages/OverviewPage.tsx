@@ -1,191 +1,343 @@
-import { useEffect, useState } from 'react'
-import { getAnalysisRange, getTodayIST, loadFinancialAnalysis } from '../services/financialAnalysis'
-import type { AnalysisPeriod, AnalysisView } from '../services/financialAnalysis'
-import { STORAGE_KEYS } from '../services/storage'
 
-const money = (paise: number) => new Intl.NumberFormat('en-IN', {
-  style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2,
-}).format(paise / 100)
-const panel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
-const button = 'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-teal-700'
+import { useData } from '../hooks/useData'
 
-type LoadState =
-  | { key: string; status: 'loading' }
-  | { key: string; status: 'success'; data: AnalysisView }
-  | { key: string; status: 'error'; message: string }
+const money = (paise: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(paise / 100)
 
-function AnalysisResults({ data }: { data: AnalysisView }) {
-  const { summary, recordedDates, hasRecords, dayStatuses, dayAnalysis } = data
-  const knownIncomeDate = (date: string) => recordedDates.includes(date) || dayStatuses[date] === 'complete' || dayStatuses[date] === 'no_work'
-  const hasDailyEvidence = hasRecords || Object.values(dayStatuses).some(status => status === 'complete' || status === 'no_work')
-  const statusLabel = (date: string) => {
-    if (dayAnalysis.status === 'error') return 'Daily status unavailable'
-    switch (dayStatuses[date]) {
-      case 'complete': return 'Complete — worked'
-      case 'no_work': return 'Explicitly no work'
-      case 'incomplete': return 'Incomplete logging'
-      default: return 'Unknown — no daily status'
-    }
-  }
-  const recorded = new Set(recordedDates)
-  const peak = Math.max(1, ...summary.dailySeries.map(day => day.incomePaise))
-  const categories = Object.entries(summary.expenseCategoryTotals).sort((a, b) => b[1] - a[1])
-  const categoryMax = Math.max(1, ...categories.map(([, amount]) => amount))
-  const cards = [
-    { label: 'Recorded income', amount: summary.periodIncomePaise, note: 'Cash receipts in the selected period', color: 'text-teal-800' },
-    { label: 'Recorded expenses', amount: summary.periodExpensesPaise, note: 'Expense entries in the selected period', color: 'text-rose-800' },
-    { label: 'Net recorded cash flow', amount: summary.netRecordedCashFlowPaise, note: 'Income minus expenses — not your current balance', color: 'text-slate-900' },
-  ]
-  return (
-    <div className="space-y-6">
-      <p className="text-sm text-slate-600">Loaded {data.startDate} to {data.endDate}, inclusive · IST calendar dates · Local profile: <span className="break-all font-medium">{data.profileId}</span></p>
-      {!hasRecords && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-        No transaction entries in this period. Saved daily statuses are shown below when available; unlogged days remain unknown.
-      </div>}
-      <section aria-label="Financial totals" className="grid gap-4 md:grid-cols-3">
-        {cards.map(card => <article key={card.label} className={panel}>
-          <h2 className="text-sm font-medium text-slate-600">{card.label}</h2>
-          <p className={`mt-3 break-words text-2xl font-bold ${card.color}`}>{hasRecords ? money(card.amount) : 'No entries'}</p>
-          <p className="mt-2 text-xs leading-5 text-slate-500">{card.note}</p>
-        </article>)}
-      </section>
+const localDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
-      <section className={panel} aria-labelledby="income-trend-heading">
-        <h2 id="income-trend-heading" className="text-lg font-bold text-slate-900">Recorded income trend</h2>
-        <p className="mt-1 text-sm text-slate-600">Bars show recorded cash income, including repayments. A completed workday can have ₹0 income. No-work days are labelled separately. Grey markers are unknown or incomplete days without entries, not confirmed zero earnings.</p>
-        {hasDailyEvidence ? <>
-          <div className="mt-5 overflow-x-auto" tabIndex={0} role="region" aria-label="Scrollable daily income chart">
-            <div className="flex items-end gap-2 border-b border-slate-200 pb-2" style={{ minWidth: summary.dailySeries.length * 48 }}>
-              {summary.dailySeries.map(day => <div key={day.date} className="min-w-10 flex-1 text-center">
-                <div className="flex h-36 items-end justify-center">
-                  {knownIncomeDate(day.date) ? <div
-                    className="w-6 rounded-t bg-teal-600"
-                    style={{ height: day.incomePaise === 0 ? 2 : Math.max(3, day.incomePaise / peak * 140) }}
-                    role="img" aria-label={`${day.date}: ${money(day.incomePaise)} recorded income; ${statusLabel(day.date)}`}
-                    title={`${day.date}: ${money(day.incomePaise)} recorded income; ${statusLabel(day.date)}`}
-                  /> : <span role="img" aria-label={`${day.date}: ${statusLabel(day.date)}; no transaction entries`} title={`${day.date}: ${statusLabel(day.date)}; no transaction entries`} className="mb-1 h-1 w-5 rounded bg-slate-300" />}
-                </div>
-                <span className="mt-2 block text-xs text-slate-600">{day.date.slice(8)}/{day.date.slice(5, 7)}</span>
-              </div>)}
-            </div>
-          </div>
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm font-medium text-teal-800">View exact daily values</summary>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <caption className="sr-only">Daily recorded income, expenses and net cash flow for the selected period</caption>
-                <thead><tr className="border-b border-slate-200"><th scope="col" className="p-2">Date</th><th scope="col" className="p-2">Income</th><th scope="col" className="p-2">Expenses</th><th scope="col" className="p-2">Net</th><th scope="col" className="p-2">Records</th></tr></thead>
-                <tbody>{summary.dailySeries.map(day => <tr key={day.date} className="border-b border-slate-100">
-                  <th scope="row" className="whitespace-nowrap p-2 font-normal">{day.date}</th>
-                  {[day.incomePaise, day.expensesPaise, day.netPaise].map((value, index) => <td key={index} className="whitespace-nowrap p-2">{recorded.has(day.date) || dayStatuses[day.date] === 'complete' || (index === 0 && dayStatuses[day.date] === 'no_work') ? money(value) : '—'}</td>)}
-                  <td className="p-2">{statusLabel(day.date)}</td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-          </details>
-        </> : <p className="mt-5 text-sm text-slate-500">No recorded trend to display.</p>}
-      </section>
-
-      <section className={panel} aria-labelledby="expense-categories-heading">
-        <h2 id="expense-categories-heading" className="text-lg font-bold text-slate-900">Expense categories</h2>
-        {categories.length ? <ul className="mt-4 space-y-4">
-          {categories.map(([category, amount]) => <li key={category}>
-            <div className="mb-2 flex flex-wrap justify-between gap-2 text-sm"><span className="capitalize text-slate-700">{category.replace(/[-_]/g, ' ')}</span><span className="font-semibold">{money(amount)}</span></div>
-            <div aria-hidden="true" className="h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-indigo-500" style={{ width: `${amount / categoryMax * 100}%` }} /></div>
-          </li>)}
-        </ul> : <p className="mt-4 text-sm text-slate-500">{hasRecords ? 'No expense entries in this period.' : 'No transaction entries in this period.'}</p>}
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2" aria-label="Savings and recorded-day analysis">
-        <article className={panel}>
-          <h2 className="text-lg font-bold text-slate-900">Savings summary</h2>
-          <p className="mt-3 font-medium text-slate-700">Unavailable — allocation data not connected</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">The supplied summary does not include savings contributions or withdrawals. Net cash flow is not being substituted for savings.</p>
-        </article>
-        <article className={panel}>
-          <h2 className="text-lg font-bold text-slate-900">Best / worst recorded earning days</h2>
-          <p className="mt-2 text-sm text-slate-600">Uses recorded cash income on completed workdays only, including any repayments. No-work, incomplete and missing days are not ranked.</p>
-          {dayAnalysis.status === 'error' ? <div role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
-            <p className="font-semibold">Daily analysis needs attention</p>
-            <p className="mt-1">{dayAnalysis.message}</p>
-            <p className="mt-2">Review daily statuses in Shifts &amp; Work Sessions, then use Refresh records above. Transaction totals remain available.</p>
-          </div> : <>
-            <p className="mt-3 text-sm text-slate-600">{dayAnalysis.result.eligibleDayCount} completed workdays · {dayAnalysis.result.noWorkDayCount} no-work days · {dayAnalysis.result.incompleteDayCount} incomplete · {dayAnalysis.result.missingDayCount} missing</p>
-            <p className="mt-1 text-xs text-slate-500">Under the current calculation rules, today is counted as incomplete unless marked complete.</p>
-            {dayAnalysis.result.bestRecordedDays?.length ? <div className="mt-4 space-y-4">
-              <div><h3 className="font-semibold text-teal-800">Best recorded day(s)</h3><ul>{dayAnalysis.result.bestRecordedDays.map(day => <li key={day.date} className="mt-1 text-sm">{day.date}: {money(day.incomePaise)}</li>)}</ul></div>
-              <div><h3 className="font-semibold text-slate-800">Worst recorded day(s)</h3><ul>{dayAnalysis.result.worstRecordedDays?.map(day => <li key={day.date} className="mt-1 text-sm">{day.date}: {money(day.incomePaise)}</li>)}</ul></div>
-              {dayAnalysis.result.bestEqualsWorst && <p className="text-sm text-slate-600">Best and worst match because there is one completed workday, or all completed workdays have equal income.</p>}
-            </div> : <p className="mt-4 text-sm text-slate-600">No completed workdays in this period. Mark a genuinely finished workday complete to include it. Completed ₹0 days are eligible.</p>}
-            <dl className="mt-4 space-y-2 border-t border-slate-200 pt-3 text-sm">
-              <div><dt>Average per recorded workday</dt><dd className="font-semibold">{dayAnalysis.result.averageIncomePerRecordedWorkday ? money(dayAnalysis.result.averageIncomePerRecordedWorkday.averagePaise) : 'Unavailable — no completed workdays'}</dd></div>
-              <div><dt>Average per fully logged calendar day</dt><dd className="font-semibold">{dayAnalysis.result.averageIncomePerFullyLoggedCalendarDay ? money(dayAnalysis.result.averageIncomePerFullyLoggedCalendarDay.averagePaise) : 'Unavailable — no fully logged days'}</dd></div>
-            </dl>
-          </>}
-        </article>
-      </section>
-    </div>
-  )
+const goTo = (tab: string) => {
+  window.location.hash = tab
 }
 
 export function OverviewPage() {
-  const [period, setPeriod] = useState<AnalysisPeriod>('week')
-  const [endDate, setEndDate] = useState(getTodayIST)
-  const [revision, setRevision] = useState(0)
-  const [state, setState] = useState<LoadState>({ key: '', status: 'loading' })
-  const requestKey = `${period}:${endDate}:${revision}`
-  let rangeLabel = ''
-  try { const range = getAnalysisRange(period, endDate); rangeLabel = `${range.startDate} to ${range.endDate} (inclusive)` } catch { rangeLabel = 'Choose a valid end date.' }
+  const { transactions, dayLogs, loading, error } = useData()
 
-  useEffect(() => {
-    let cancelled = false
-    loadFinancialAnalysis(period, endDate).then(data => {
-      if (!cancelled) setState({ key: requestKey, status: 'success', data })
-    }).catch((error: unknown) => {
-      if (!cancelled) setState({ key: requestKey, status: 'error', message: error instanceof Error ? error.message : 'Unable to load financial records.' })
-    })
-    return () => { cancelled = true }
-  }, [period, endDate, requestKey])
+  const today = localDate(new Date())
+  const month = today.slice(0, 7)
 
-  useEffect(() => {
-    const refresh = () => setRevision(value => value + 1)
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === STORAGE_KEYS.TRANSACTIONS || event.key === STORAGE_KEYS.PROFILE || event.key === STORAGE_KEYS.DAY_LOGS) refresh()
+  const todayTransactions = transactions.filter(
+    (tx) => tx.date === today
+  )
+
+  const todayIncome = todayTransactions
+    .filter((tx) => tx.type === 'income')
+    .reduce((sum, tx) => sum + tx.amountPaise, 0)
+
+  const todayExpenses = todayTransactions
+    .filter((tx) => tx.type === 'expense')
+    .reduce((sum, tx) => sum + tx.amountPaise, 0)
+
+  const monthlyTransactions = transactions.filter(
+    (tx) => tx.date.startsWith(month)
+  )
+
+  const monthlyNet = monthlyTransactions.reduce(
+    (sum, tx) =>
+      sum + (tx.type === 'income' ? tx.amountPaise : -tx.amountPaise),
+    0
+  )
+
+  const lastSevenDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date()
+    date.setHours(12, 0, 0, 0)
+    date.setDate(date.getDate() - (6 - index))
+
+    const key = localDate(date)
+    const daily = transactions.filter((tx) => tx.date === key)
+
+    return {
+      date: key,
+      label: date.toLocaleDateString('en-IN', { weekday: 'short' }),
+      income: daily
+        .filter((tx) => tx.type === 'income')
+        .reduce((sum, tx) => sum + tx.amountPaise, 0),
+      expense: daily
+        .filter((tx) => tx.type === 'expense')
+        .reduce((sum, tx) => sum + tx.amountPaise, 0),
     }
-    window.addEventListener('focus', refresh)
-    window.addEventListener('storage', onStorage)
-    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('storage', onStorage) }
-  }, [])
+  })
 
-  const loading = state.key !== requestKey || state.status === 'loading'
+  const maxChartValue = Math.max(
+    1,
+    ...lastSevenDays.flatMap((day) => [day.income, day.expense])
+  )
+
+  const weekStart = lastSevenDays[0].date
+
+  const weeklyLogs = dayLogs.filter(
+    (log) => log.date >= weekStart && log.date <= today
+  )
+
+  const completed = weeklyLogs.filter(
+    (log) => log.status === 'complete'
+  ).length
+
+  const incomplete = weeklyLogs.filter(
+    (log) => log.status === 'incomplete'
+  ).length
+
+  const noWork = weeklyLogs.filter(
+    (log) => log.status === 'no_work'
+  ).length
+
+  const recentTransactions = [...transactions]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5)
+
+  const cards = [
+    {
+      label: "Today's Earnings",
+      value: todayIncome,
+      color: 'text-emerald-700',
+    },
+    {
+      label: "Today's Expenses",
+      value: todayExpenses,
+      color: 'text-rose-600',
+    },
+    {
+      label: "Today's Net Income",
+      value: todayIncome - todayExpenses,
+      color: 'text-teal-700',
+    },
+    {
+      label: "This Month's Net Income",
+      value: monthlyNet,
+      color: 'text-slate-900',
+    },
+  ]
+
+  if (loading) {
+    return <p className="p-6 text-slate-600">Loading dashboard...</p>
+  }
+
+  if (error) {
+    return (
+      <p className="rounded-xl bg-rose-50 p-6 text-rose-700">
+        Unable to load dashboard: {error}
+      </p>
+    )
+  }
+
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-widest text-teal-700">IncomeFlow · Financial analysis</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">Know what came in. See what went out.</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Based only on saved transaction records in this browser. No synthetic transactions are loaded. Unlogged activity is unknown.</p>
+    <main className="space-y-7">
+      <header className="rounded-2xl bg-gradient-to-r from-slate-900 to-teal-800 p-6 text-white sm:p-8">
+        <p className="text-sm font-medium text-teal-200">
+          IncomeFlow • Rider Dashboard
+        </p>
+
+        <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
+          Your Financial Dashboard
+        </h1>
+
+        <p className="mt-2 text-sm text-slate-200 sm:text-base">
+          Track your earnings, expenses and daily work in one place.
+        </p>
+
+        <p className="mt-4 text-sm text-teal-100">
+          {new Date().toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </p>
       </header>
-      <section className={panel} aria-label="Analysis period controls">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="min-w-0 w-full text-sm font-medium text-slate-700 sm:w-auto">Period
-            <select value={period} onChange={event => setPeriod(event.target.value as AnalysisPeriod)} className="mt-1 block w-full max-w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
-              <option value="week">Weekly — Monday to selected date</option>
-              <option value="month">Monthly — first day to selected date</option>
-            </select>
-          </label>
-          <label className="text-sm font-medium text-slate-700">Period ending (IST)
-            <input type="date" value={endDate} min="1900-01-01" max={getTodayIST()} onChange={event => setEndDate(event.target.value)} className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2" />
-          </label>
-          <button className={button} type="button" onClick={() => setRevision(value => value + 1)}>Refresh records</button>
-        </div>
-        <p className="mt-3 text-sm text-slate-500">{rangeLabel}. All loaded cards and charts use this same period.</p>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <article
+            key={card.label}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-sm font-medium text-slate-500">
+              {card.label}
+            </p>
+            <p className={`mt-3 text-3xl font-bold ${card.color}`}>
+              {money(card.value)}
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Based on your saved transactions
+            </p>
+          </article>
+        ))}
       </section>
-      {loading ? <div role="status" className={panel}>Loading recorded financial activity…</div> : state.status === 'error' ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-red-900">
-        <h2 className="font-semibold">Could not load financial analysis</h2>
-        <p className="mt-2 text-sm">{state.message}</p>
-        <p className="mt-2 text-sm">No demo figures have been substituted. Correct the date or underlying data, then retry. Do not clear storage to hide this error.</p>
-        <button type="button" className={`${button} mt-4`} onClick={() => setRevision(value => value + 1)}>Retry</button>
-      </div> : state.status === 'success' ? <AnalysisResults data={state.data} /> : null}
-    </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h2 className="text-xl font-bold text-slate-900">
+          Last 7 Days: Income vs Expenses
+        </h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Your actual recorded income and expenses
+        </p>
+
+        <div className="mt-5 flex items-center gap-5 text-xs">
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded bg-teal-600" />
+            Income
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded bg-rose-400" />
+            Expenses
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-7 gap-2">
+          {lastSevenDays.map((day) => (
+            <div key={day.date} className="min-w-0 text-center">
+              <div className="flex h-44 items-end justify-center gap-1 rounded-lg bg-slate-50 px-1 py-2">
+                <div
+                  title={`Income: ${money(day.income)}`}
+                  className="w-1/3 rounded-t bg-teal-600"
+                  style={{
+                    height: `${(day.income / maxChartValue) * 100}%`,
+                  }}
+                />
+                <div
+                  title={`Expenses: ${money(day.expense)}`}
+                  className="w-1/3 rounded-t bg-rose-400"
+                  style={{
+                    height: `${(day.expense / maxChartValue) * 100}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-xs font-medium text-slate-600">
+                {day.label}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {lastSevenDays.every(
+          (day) => day.income === 0 && day.expense === 0
+        ) && (
+            <p className="mt-4 text-center text-sm text-slate-500">
+              No transactions recorded in the last seven days.
+            </p>
+          )}
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900">
+            Work Status
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Recorded status over the last seven days
+          </p>
+
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            {[
+              { label: 'Completed', value: completed, color: 'text-emerald-700' },
+              { label: 'Incomplete', value: incomplete, color: 'text-amber-700' },
+              { label: 'No Work', value: noWork, color: 'text-slate-700' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl bg-slate-50 p-4 text-center">
+                <p className={`text-3xl font-bold ${item.color}`}>
+                  {item.value}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">
+                  {item.label}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => goTo('shifts')}
+            className="mt-5 rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+          >
+            Log Work
+          </button>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-900">
+            Quick Actions
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage your finances quickly
+          </p>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {[
+              { label: 'Add Income', tab: 'income-expenses' },
+              { label: 'Add Expense', tab: 'income-expenses' },
+              { label: 'Manage Udhaar', tab: 'udhaar' },
+              { label: 'Bills & Savings', tab: 'bills-vaults' },
+            ].map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => goTo(action.tab)}
+                className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-left text-sm font-semibold text-teal-900 hover:bg-teal-100"
+              >
+                {action.label} →
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold text-slate-900">
+            Recent Transactions
+          </h2>
+          <button
+            type="button"
+            onClick={() => goTo('income-expenses')}
+            className="text-sm font-medium text-teal-700 hover:underline"
+          >
+            View All
+          </button>
+        </div>
+
+        {recentTransactions.length === 0 ? (
+          <p className="mt-5 rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
+            No transactions yet. Add your first income or expense.
+          </p>
+        ) : (
+          <div className="mt-4 divide-y divide-slate-100">
+            {recentTransactions.map((tx) => (
+              <div
+                key={tx.id}
+                className="flex items-center justify-between gap-4 py-4"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold capitalize text-slate-900">
+                    {tx.category}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {tx.date}
+                    {tx.description ? ` • ${tx.description}` : ''}
+                  </p>
+                </div>
+
+                <p
+                  className={`shrink-0 font-bold ${tx.type === 'income'
+                      ? 'text-emerald-700'
+                      : 'text-rose-600'
+                    }`}
+                >
+                  {tx.type === 'income' ? '+' : '-'}
+                  {money(tx.amountPaise)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
   )
 }

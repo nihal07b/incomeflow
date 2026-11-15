@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-
 import type { NavTabId } from './components/navigation'
 import { Layout } from './components/Layout'
 import BillsAndGoals from './components/BillsAndGoals'
 import SaathiAssistant from './components/SaathiAssistant'
 
 import { OverviewPage } from './pages/OverviewPage'
+import { FinancialAnalysisPage } from './pages/FinancialAnalysisPage'
 import { ShiftsPage } from './pages/ShiftsPage'
 import { IncomeExpensesPage } from './pages/IncomeExpensesPage'
 import { UdhaarPage } from './pages/UdhaarPage'
@@ -13,8 +13,14 @@ import { UdhaarPage } from './pages/UdhaarPage'
 import { DataProvider } from './context/DataContext'
 import { useProfile } from './hooks/useData'
 
-function getInitialTab(): NavTabId {
+type AppPage = NavTabId | 'financial-analysis'
+
+function getInitialPage(): AppPage {
   const hash = window.location.hash.replace('#', '')
+
+  if (hash === 'financial-analysis') {
+    return 'financial-analysis'
+  }
 
   if (
     hash === 'overview' ||
@@ -29,10 +35,6 @@ function getInitialTab(): NavTabId {
   return 'overview'
 }
 
-/**
- * Reads the saved profile from the shared data provider.
- * This component must render inside DataProvider.
- */
 function BillsAndGoalsPage() {
   const { profile, loading, error } = useProfile()
 
@@ -79,16 +81,16 @@ function BillsAndGoalsPage() {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTabId>(getInitialTab)
+  const [activePage, setActivePage] = useState<AppPage>(getInitialPage)
 
   const handleSelectTab = useCallback((tab: NavTabId) => {
-    setActiveTab(tab)
+    setActivePage(tab)
     window.location.hash = tab
   }, [])
 
   useEffect(() => {
     const handleHashChange = () => {
-      setActiveTab(getInitialTab())
+      setActivePage(getInitialPage())
     }
 
     window.addEventListener('hashchange', handleHashChange)
@@ -99,9 +101,12 @@ export default function App() {
   }, [])
 
   const renderCurrentPage = () => {
-    switch (activeTab) {
+    switch (activePage) {
       case 'overview':
         return <OverviewPage />
+
+      case 'financial-analysis':
+        return <FinancialAnalysisPage />
 
       case 'shifts':
         return <ShiftsPage />
@@ -120,9 +125,12 @@ export default function App() {
     }
   }
 
+  const activeNavTab: NavTabId =
+    activePage === 'financial-analysis' ? 'overview' : activePage
+
   return (
     <DataProvider>
-      <Layout activeTab={activeTab} onSelectTab={handleSelectTab}>
+      <Layout activeTab={activeNavTab} onSelectTab={handleSelectTab}>
         {renderCurrentPage()}
       </Layout>
 
