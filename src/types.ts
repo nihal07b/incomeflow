@@ -112,3 +112,21 @@ export interface DayLog {
   date: LocalDate
   status: DayStatus
 }
+
+export type GigWorkerJob =
+  | 'food-delivery'
+  | 'quick-commerce'
+  | 'bike-taxi'
+  | 'cab-driver'
+  | 'freelancer'
+  | 'other'
+
+export interface DemoUser {
+  id: string
+  name: string
+  email: string
+  age: number
+  job: GigWorkerJob
+  platform: string
+  onboardingComplete: boolean
+}
