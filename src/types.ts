@@ -57,7 +57,6 @@ export interface PlanResult {
   explanation: string
 }
 
-
 // Member 4 financial summary contract. Append once; preserve existing types.
 export type TransactionType = 'income' | 'expense'
 
@@ -106,40 +105,6 @@ export interface FinancialSummaryInput {
   transactions?: Transaction[]
 }
 
-export interface ReminderPreferences {
-  profileId: string
-  dailyLoggingEnabled: boolean
-  dailyLoggingPrimaryTime: string // e.g. "14:00"
-  dailyLoggingSecondaryEnabled: boolean
-  dailyLoggingSecondaryTime?: string // e.g. "21:00"
-  udhaarDueEnabled: boolean
-  billsDueEnabled: boolean
-  advanceNoticeDays: number
-  updatedAt?: string
-}
-
-export type ReminderType =
-  | 'daily-logging'
-  | 'udhaar-due'
-  | 'bill-due'
-
-export type ReminderUrgency = 'urgent' | 'warning' | 'info'
-
-export interface InAppReminder {
-  id: string
-  type: ReminderType
-  urgency: ReminderUrgency
-  title: string
-  message: string
-  scheduledTime?: string
-  dueDate?: LocalDate
-  amountPaise?: MoneyPaise
-  statusLabel?: string
-  entityId?: string
-  targetTab?: string
-  dismissed?: boolean
-  createdAt: string
-}
 
 export type DayStatus = 'complete' | 'no_work' | 'incomplete'
 
