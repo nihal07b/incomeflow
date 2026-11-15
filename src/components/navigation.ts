@@ -1,4 +1,4 @@
-export type NavTabId = 'overview' | 'shifts' | 'income-expenses' | 'bills-vaults' | 'udhaar'
+﻿export type NavTabId = 'overview' | 'shifts' | 'income-expenses' | 'bills-vaults' | 'udhaar'
 
 export interface NavTabItem {
   id: NavTabId
